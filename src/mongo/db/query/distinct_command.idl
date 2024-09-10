@@ -49,11 +49,11 @@ commands:
             query:
                 description: "Optional query that filters the documents from which to retrieve the
                               distinct values."
-                type: object
+                type: object_owned
                 optional: true
             collation:
                 description: "Optional collation for the command."
-                type: object
+                type: object_owned
                 optional: true
             mirrored:
                 description: "Indicates whether the operation is a mirrored read"
@@ -70,3 +70,6 @@ commands:
                 description: "Query settings for the given query"
                 type: QuerySettings
                 optional: true
+            includeQueryStatsMetrics:
+                description: "Determines whether or not to include query stats metrics in the response."
+                type: optionalBool

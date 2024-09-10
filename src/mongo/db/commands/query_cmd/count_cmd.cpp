@@ -62,6 +62,7 @@
 #include "mongo/db/curop_failpoint_helpers.h"
 #include "mongo/db/database_name.h"
 #include "mongo/db/db_raii.h"
+#include "mongo/db/feature_flag.h"
 #include "mongo/db/fle_crud.h"
 #include "mongo/db/namespace_string.h"
 #include "mongo/db/operation_context.h"
@@ -78,6 +79,8 @@
 #include "mongo/db/query/plan_explainer.h"
 #include "mongo/db/query/plan_summary_stats.h"
 #include "mongo/db/query/query_settings/query_settings_gen.h"
+#include "mongo/db/query/query_stats/count_key.h"
+#include "mongo/db/query/query_stats/query_stats.h"
 #include "mongo/db/query/view_response_formatter.h"
 #include "mongo/db/read_concern_support_result.h"
 #include "mongo/db/repl/read_concern_level.h"
@@ -104,6 +107,18 @@
 
 namespace mongo {
 namespace {
+
+std::unique_ptr<ExtensionsCallback> getExtensionsCallback(const CollectionPtr& collection,
+                                                          OperationContext* opCtx,
+                                                          const NamespaceString& nss) {
+    if (collection) {
+        return std::make_unique<ExtensionsCallbackReal>(ExtensionsCallbackReal(opCtx, &nss));
+    }
+    return std::make_unique<ExtensionsCallbackNoop>(ExtensionsCallbackNoop());
+}
+
+// The # of documents returned is always 1 for the count command.
+static constexpr long long kNReturned = 1;
 
 // Failpoint which causes to hang "count" cmd after acquiring the DB lock.
 MONGO_FAIL_POINT_DEFINE(hangBeforeCollectionCount);
@@ -216,9 +231,10 @@ public:
             AutoGetCollection::Options{}.viewMode(auto_get_collection::ViewMode::kViewsPermitted));
         const auto nss = ctx->getNss();
 
-        CountCommandRequest request(NamespaceStringOrUUID(NamespaceString{}));
+        std::unique_ptr<CountCommandRequest> request;
         try {
-            request = CountCommandRequest::parse(IDLParserContext("count"), opMsgRequest);
+            request = std::make_unique<CountCommandRequest>(
+                CountCommandRequest::parse(IDLParserContext("count"), opMsgRequest));
         } catch (...) {
             return exceptionToStatus();
         }
@@ -227,19 +243,22 @@ public:
         CurOp::get(opCtx)->beginQueryPlanningTimer();
 
         if (shouldDoFLERewrite(request)) {
-            if (!request.getEncryptionInformation()->getCrudProcessed().value_or(false)) {
-                processFLECountD(opCtx, nss, &request);
+            if (!request->getEncryptionInformation()->getCrudProcessed().value_or(false)) {
+                processFLECountD(opCtx, nss, request.get());
             }
             stdx::lock_guard<Client> lk(*opCtx->getClient());
             CurOp::get(opCtx)->setShouldOmitDiagnosticInformation_inlock(lk, true);
         }
 
-        SerializationContext serializationCtx = request.getSerializationContext();
+        SerializationContext serializationCtx = request->getSerializationContext();
         if (ctx->getView()) {
             // Relinquish locks. The aggregation command will re-acquire them.
             ctx.reset();
 
-            auto viewAggregation = countCommandAsAggregationCommand(request, nss);
+            auto curOp = CurOp::get(opCtx);
+            curOp->debug().queryStatsInfo.disableForSubqueryExecution = true;
+
+            auto viewAggregation = countCommandAsAggregationCommand(*request, nss);
             if (!viewAggregation.isOK()) {
                 return viewAggregation.getStatus();
             }
@@ -251,8 +270,8 @@ public:
             auto viewAggRequest = aggregation_request_helper::parseFromBSON(
                 viewAggCmd, opMsgRequest.validatedTenancyScope, verbosity, serializationCtx);
 
-            // An empty PrivilegeVector is acceptable because these privileges are only checked on
-            // getMore and explain will not open a cursor.
+            // An empty PrivilegeVector is acceptable because these privileges are only checked
+            // on getMore and explain will not open a cursor.
             return runAggregate(opCtx,
                                 viewAggRequest,
                                 {viewAggRequest},
@@ -275,9 +294,15 @@ public:
         }
 
         auto expCtx = makeExpressionContextForGetExecutor(
-            opCtx, request.getCollation().value_or(BSONObj()), nss, verbosity);
+            opCtx, request->getCollation().value_or(BSONObj()), nss, verbosity);
 
-        auto statusWithPlanExecutor = getExecutorCount(expCtx, &collection, request, nss);
+        const auto extensionsCallback = getExtensionsCallback(collection, opCtx, nss);
+        auto parsedFind = uassertStatusOK(
+            parsed_find_command::parseFromCount(expCtx, *request, *extensionsCallback, nss));
+
+        auto statusWithPlanExecutor =
+            getExecutorCount(expCtx, &collection, std::move(parsedFind), *request);
+
         if (!statusWithPlanExecutor.isOK()) {
             return statusWithPlanExecutor.getStatus();
         }
@@ -358,6 +383,34 @@ public:
             }
         }
 
+        auto expCtx = makeExpressionContextForGetExecutor(
+            opCtx, request.getCollation().value_or(BSONObj()), nss, boost::none /* verbosity*/);
+
+        const auto& collection = ctx->getCollection();
+        const auto extensionsCallback = getExtensionsCallback(collection, opCtx, nss);
+        auto parsedFind = uassertStatusOK(
+            parsed_find_command::parseFromCount(expCtx, request, *extensionsCallback, nss));
+
+        if (feature_flags::gFeatureFlagQueryStatsCountDistinct
+                .isEnabledUseLastLTSFCVWhenUninitialized(
+                    serverGlobalParams.featureCompatibility.acquireFCVSnapshot())) {
+            query_stats::registerRequest(opCtx, nss, [&]() {
+                return std::make_unique<query_stats::CountKey>(expCtx,
+                                                               *parsedFind,
+                                                               request.getLimit().has_value(),
+                                                               request.getSkip().has_value(),
+                                                               request.getReadConcern(),
+                                                               request.getMaxTimeMS().has_value(),
+                                                               ctx->getCollectionType());
+            });
+
+            if (request.getIncludeQueryStatsMetrics() &&
+                feature_flags::gFeatureFlagQueryStatsDataBearingNodes.isEnabled(
+                    serverGlobalParams.featureCompatibility.acquireFCVSnapshot())) {
+                curOp->debug().queryStatsInfo.metricsRequested = true;
+            }
+        }
+
         if (ctx->getView()) {
             auto viewAggregation = countCommandAsAggregationCommand(request, nss);
             // Relinquish locks. The aggregation command will re-acquire them.
@@ -381,7 +434,6 @@ public:
         uassertStatusOK(replCoord->checkCanServeReadsFor(
             opCtx, nss, ReadPreferenceSetting::get(opCtx).canRunOnSecondary()));
 
-        const auto& collection = ctx->getCollection();
 
         // Prevent chunks from being cleaned up during yields - this allows us to only check the
         // version on initial entry into count.
@@ -394,14 +446,8 @@ public:
                         CollectionShardingState::OrphanCleanupPolicy::kDisallowOrphanCleanup));
         }
 
-        auto statusWithPlanExecutor = getExecutorCount(
-            makeExpressionContextForGetExecutor(opCtx,
-                                                request.getCollation().value_or(BSONObj()),
-                                                nss,
-                                                boost::none /* verbosity */),
-            &collection,
-            request,
-            nss);
+        auto statusWithPlanExecutor =
+            getExecutorCount(expCtx, &collection, std::move(parsedFind), request);
         uassertStatusOK(statusWithPlanExecutor.getStatus());
 
         auto exec = std::move(statusWithPlanExecutor.getValue());
@@ -420,6 +466,7 @@ public:
             CollectionQueryInfo::get(collection).notifyOfQuery(opCtx, collection, summaryStats);
         }
         curOp->debug().setPlanSummaryMetrics(std::move(summaryStats));
+        curOp->setEndOfOpMetrics(kNReturned);
 
         if (curOp->shouldDBProfile()) {
             auto&& explainer = exec->getPlanExplainer();
@@ -429,6 +476,16 @@ public:
         }
 
         result.appendNumber("n", countResult);
+
+        const auto* cq = exec->getCanonicalQuery();
+        expCtx = cq ? cq->getExpCtx()
+                    : ExpressionContext::makeBlankExpressionContext(opCtx, exec->nss());
+        collectQueryStatsMongod(opCtx, expCtx, std::move(curOp->debug().queryStatsInfo.key));
+
+        if (curOp->debug().queryStatsInfo.metricsRequested) {
+            result.append("metrics", curOp->debug().getCursorMetrics().toBSON());
+        }
+
         return true;
     }
 

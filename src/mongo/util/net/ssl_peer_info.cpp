@@ -45,4 +45,15 @@ const SSLPeerInfo& SSLPeerInfo::forSession(
     const std::shared_ptr<const transport::Session>& session) {
     return peerInfoForSession(session.get());
 }
+
+void SSLPeerInfo::appendPeerInfoToVector(std::vector<std::string>& elements) const {
+    elements.push_back(_subjectName.toString());
+    if (_sniName) {
+        elements.push_back(*_sniName);
+    }
+    if (_clusterMembership) {
+        elements.push_back(*_clusterMembership);
+    }
+}
+
 }  // namespace mongo

@@ -1112,6 +1112,27 @@ bool shouldUseRegularSbe(OperationContext* opCtx, const CanonicalQuery& cq, cons
     return cq.getExpCtx()->sbeCompatibility >= minRequiredCompatibility;
 }
 
+bool shouldUseSbePlanCache(const QueryPlannerParams& params) {
+    // The logic in this funtion depends on the fact that we clear the SBE plan cache on index
+    // creation.
+
+    // SBE feature flag guards SBE plan cache use. Check this first to avoid doing potentially
+    // expensive checks unnecessarily.
+    const auto fcvSnapshot = serverGlobalParams.featureCompatibility.acquireFCVSnapshot();
+    if (!feature_flags::gFeatureFlagSbeFull.isEnabled(fcvSnapshot)) {
+        return false;
+    }
+
+    // SBE plan cache does not support partial indexes.
+    // TODO SERVER-94392: Remove this restriction once they are supported.
+    for (const auto& idx : params.mainCollectionInfo.indexes) {
+        if (idx.filterExpr) {
+            return false;
+        }
+    }
+    return true;
+}
+
 boost::optional<ScopedCollectionFilter> getScopedCollectionFilter(
     OperationContext* opCtx,
     const MultipleCollectionAccessor& collections,
@@ -1263,10 +1284,8 @@ StatusWith<std::unique_ptr<PlanExecutor, PlanExecutor::Deleter>> getExecutorFind
 
             plannerParams->setTargetSbeStageBuilder(opCtx, *canonicalQuery, collections);
 
-            const auto fcvSnapshot = serverGlobalParams.featureCompatibility.acquireFCVSnapshot();
-            const bool useSbePlanCache = feature_flags::gFeatureFlagSbeFull.isEnabled(fcvSnapshot);
-
-            if (useSbePlanCache) {
+            if (shouldUseSbePlanCache(*plannerParams)) {
+                canonicalQuery->setUsingSbePlanCache(true);
                 return getClassicPlannerForSbe<
                     SbeWithClassicRuntimePlanningAndSbeCachePrepareExecutionHelper>(
                     opCtx,
@@ -1276,6 +1295,7 @@ StatusWith<std::unique_ptr<PlanExecutor, PlanExecutor::Deleter>> getExecutorFind
                     std::move(sbeYieldPolicy),
                     std::move(plannerParams));
             } else {
+                canonicalQuery->setUsingSbePlanCache(false);
                 return getClassicPlannerForSbe<
                     SbeWithClassicRuntimePlanningAndClassicCachePrepareExecutionHelper>(
                     opCtx,
@@ -1286,6 +1306,10 @@ StatusWith<std::unique_ptr<PlanExecutor, PlanExecutor::Deleter>> getExecutorFind
                     std::move(plannerParams));
             }
         }
+
+        // This codepath will use the classic runtime planner with classic PlanStages, so will not
+        // use the SBE plan cache.
+        canonicalQuery->setUsingSbePlanCache(false);
 
         // Default to using the classic executor with the classic runtime planner.
         return getClassicPlanner(
@@ -1819,39 +1843,24 @@ bool turnIxscanIntoCount(QuerySolution* soln) {
 StatusWith<std::unique_ptr<PlanExecutor, PlanExecutor::Deleter>> getExecutorCount(
     const boost::intrusive_ptr<ExpressionContext>& expCtx,
     const CollectionPtr* coll,
-    const CountCommandRequest& request,
-    const NamespaceString& nss) {
+    std::unique_ptr<ParsedFindCommand> parsedFind,
+    const CountCommandRequest& count) {
     const auto& collection = *coll;
 
     OperationContext* opCtx = expCtx->opCtx;
     std::unique_ptr<WorkingSet> ws = std::make_unique<WorkingSet>();
-    auto findCommand = std::make_unique<FindCommandRequest>(nss);
 
-    findCommand->setFilter(request.getQuery());
-    auto collation = request.getCollation().value_or(BSONObj());
-    findCommand->setCollation(collation);
-    findCommand->setHint(request.getHint());
-
-    auto& extensionsCallback = collection
-        ? static_cast<const ExtensionsCallback&>(ExtensionsCallbackReal(opCtx, &collection->ns()))
-        : static_cast<const ExtensionsCallback&>(ExtensionsCallbackNoop());
     auto statusWithCQ = CanonicalQuery::make(
-        {.expCtx = expCtx,
-         .parsedFind = ParsedFindCommandParams{.findCommand = std::move(findCommand),
-                                               .extensionsCallback = std::move(extensionsCallback),
-                                               .allowedFeatures =
-                                                   MatchExpressionParser::kAllowAllSpecialFeatures},
-         .isCountLike = true});
+        {.expCtx = expCtx, .parsedFind = std::move(parsedFind), .isCountLike = true});
     if (!statusWithCQ.isOK()) {
         return statusWithCQ.getStatus();
     }
-
     auto cq = std::move(statusWithCQ.getValue());
 
     const auto yieldPolicy = PlanYieldPolicy::YieldPolicy::YIELD_AUTO;
 
-    const auto skip = request.getSkip().value_or(0);
-    const auto limit = request.getLimit().value_or(0);
+    const auto skip = count.getSkip().value_or(0);
+    const auto limit = count.getLimit().value_or(0);
 
     ON_BLOCK_EXIT([&] {
         // Stop the query planning timer once we have an execution plan.
@@ -1876,7 +1885,7 @@ StatusWith<std::unique_ptr<PlanExecutor, PlanExecutor::Deleter>> getExecutorCoun
                                            &CollectionPtr::null,
                                            yieldPolicy,
                                            false, /* whether we must return owned BSON */
-                                           nss);
+                                           cq->getFindCommandRequest().getNamespaceOrUUID().nss());
     }
 
     // If the query is empty, then we can determine the count by just asking the collection
@@ -1887,7 +1896,8 @@ StatusWith<std::unique_ptr<PlanExecutor, PlanExecutor::Deleter>> getExecutorCoun
     const bool isEmptyQueryPredicate =
         cq->getPrimaryMatchExpression()->matchType() == MatchExpression::AND &&
         cq->getPrimaryMatchExpression()->numChildren() == 0;
-    const bool useRecordStoreCount = isEmptyQueryPredicate && request.getHint().isEmpty();
+    const bool useRecordStoreCount =
+        isEmptyQueryPredicate && cq->getFindCommandRequest().getHint().isEmpty();
 
     if (useRecordStoreCount) {
         std::unique_ptr<PlanStage> root =
@@ -1899,7 +1909,7 @@ StatusWith<std::unique_ptr<PlanExecutor, PlanExecutor::Deleter>> getExecutorCoun
                                            &CollectionPtr::null,
                                            yieldPolicy,
                                            false, /* whether we must returned owned BSON */
-                                           nss);
+                                           cq->getFindCommandRequest().getNamespaceOrUUID().nss());
     }
 
     size_t plannerOptions = QueryPlannerParams::DEFAULT;

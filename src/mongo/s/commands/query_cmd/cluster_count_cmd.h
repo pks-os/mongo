@@ -38,6 +38,8 @@
 #include "mongo/db/fle_crud.h"
 #include "mongo/db/query/count_command_as_aggregation_command.h"
 #include "mongo/db/query/count_command_gen.h"
+#include "mongo/db/query/query_stats/count_key.h"
+#include "mongo/db/query/query_stats/query_stats.h"
 #include "mongo/db/query/view_response_formatter.h"
 #include "mongo/db/views/resolved_view.h"
 #include "mongo/platform/overflow_arithmetic.h"
@@ -47,11 +49,29 @@
 #include "mongo/s/commands/query_cmd/cluster_explain.h"
 #include "mongo/s/commands/strategy.h"
 #include "mongo/s/grid.h"
+#include "mongo/s/query/exec/cluster_cursor_manager.h"
 #include "mongo/s/query/planner/cluster_aggregate.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/timer.h"
 
 namespace mongo {
+
+namespace {
+
+// The # of documents returned is always 1 for the count command.
+static constexpr long long kNReturned = 1;
+
+BSONObj prepareCountForPassthrough(const BSONObj& cmdObj, bool requestQueryStats) {
+    if (!requestQueryStats) {
+        return CommandHelpers::filterCommandRequestForPassthrough(cmdObj);
+    }
+
+    BSONObjBuilder bob(cmdObj);
+    bob.append("includeQueryStatsMetrics", true);
+    return CommandHelpers::filterCommandRequestForPassthrough(bob.done());
+}
+
+}  // namespace
 
 /**
  * Implements the find command on mongos.
@@ -116,6 +136,9 @@ public:
                               << "'",
                 nss.isValid());
 
+        // Specifies whether or not we ultimately request query stats from each shard.
+        bool requestQueryStats = false;
+
         std::vector<AsyncRequestsSender::Response> shardResponses;
         try {
             auto countRequest = CountCommandRequest::parse(IDLParserContext("count"), cmdObj);
@@ -125,6 +148,35 @@ public:
                 }
                 stdx::lock_guard<Client> lk(*opCtx->getClient());
                 CurOp::get(opCtx)->setShouldOmitDiagnosticInformation_inlock(lk, true);
+            }
+
+            const auto cri = uassertStatusOK(
+                Grid::get(opCtx)->catalogCache()->getCollectionRoutingInfo(opCtx, nss));
+            const auto collation = countRequest.getCollation().get_value_or(BSONObj());
+
+            const auto expCtx =
+                makeExpressionContextWithDefaultsForTargeter(opCtx,
+                                                             nss,
+                                                             cri,
+                                                             collation,
+                                                             boost::none /*explainVerbosity*/,
+                                                             boost::none /*letParameters*/,
+                                                             boost::none /*runtimeConstants*/);
+
+            const auto parsedFind = uassertStatusOK(parsed_find_command::parseFromCount(
+                expCtx, countRequest, ExtensionsCallbackNoop(), nss));
+
+            if (feature_flags::gFeatureFlagQueryStatsCountDistinct.isEnabled(
+                    serverGlobalParams.featureCompatibility.acquireFCVSnapshot())) {
+                query_stats::registerRequest(opCtx, nss, [&]() {
+                    return std::make_unique<query_stats::CountKey>(
+                        expCtx,
+                        *parsedFind,
+                        countRequest.getLimit().has_value(),
+                        countRequest.getSkip().has_value(),
+                        countRequest.getReadConcern(),
+                        countRequest.getMaxTimeMS().has_value());
+                });
             }
 
             // We only need to factor in the skip value when sending to the shards if we
@@ -145,24 +197,25 @@ public:
                 }
             }
             countRequest.setSkip(boost::none);
-            const auto cri = uassertStatusOK(
-                Grid::get(opCtx)->catalogCache()->getCollectionRoutingInfo(opCtx, nss));
-            const auto collation = countRequest.getCollation().get_value_or(BSONObj());
+
+            // The includeQueryStatsMetrics field is not supported on mongos for the count command,
+            // so we do not need to check the value on the original request when updating
+            // requestQueryStats here.
+            requestQueryStats = query_stats::shouldRequestRemoteMetrics(CurOp::get(opCtx)->debug());
+
             shardResponses = scatterGatherVersionedTargetByRoutingTable(
-                opCtx,
-                nss.dbName(),
+                expCtx,
+                dbName,
                 nss,
                 cri,
                 applyReadWriteConcern(
                     opCtx,
                     this,
-                    CommandHelpers::filterCommandRequestForPassthrough(countRequest.toBSON())),
+                    prepareCountForPassthrough(countRequest.toBSON(), requestQueryStats)),
                 ReadPreferenceSetting::get(opCtx),
                 Shard::RetryPolicy::kIdempotent,
                 countRequest.getQuery(),
                 collation,
-                boost::none /*letParameters*/,
-                boost::none /*runtimeConstants*/,
                 true /*eligibleForSampling*/);
         } catch (const ExceptionFor<ErrorCodes::CommandOnShardedViewNotSupportedOnMongod>& ex) {
             // Rewrite the count command as an aggregation.
@@ -197,6 +250,7 @@ public:
         }
 
         long long total = 0;
+        bool allShardMetricsReturned = true;
         BSONObjBuilder shardSubTotal(result.subobjStart("shards"));
 
         for (const auto& response : shardResponses) {
@@ -204,9 +258,22 @@ public:
             if (status.isOK()) {
                 status = getStatusFromCommandResult(response.swResponse.getValue().data);
                 if (status.isOK()) {
-                    long long shardCount = response.swResponse.getValue().data["n"].numberLong();
+                    const BSONObj& data = response.swResponse.getValue().data;
+                    const long long shardCount = data["n"].numberLong();
                     shardSubTotal.appendNumber(response.shardId.toString(), shardCount);
                     total += shardCount;
+
+                    // We aggregate the metrics from all the shards. If any shard does not include
+                    // metrics, we avoid collecting the remote metrics for the entire query and do
+                    // not write an entry to the query stats store. Note that we do not expect
+                    // shards to fail to collect metrics for the count command; this is just
+                    // thorough error handling.
+                    BSONElement shardMetrics = data["metrics"];
+                    if (allShardMetricsReturned &= shardMetrics.isABSONObj()) {
+                        const auto metrics = CursorMetrics::parse(IDLParserContext("CursorMetrics"),
+                                                                  shardMetrics.Obj());
+                        CurOp::get(opCtx)->debug().additiveMetrics.aggregateCursorMetrics(metrics);
+                    }
                     continue;
                 }
             }
@@ -220,6 +287,14 @@ public:
         shardSubTotal.doneFast();
         total = applySkipLimit(total, cmdObj);
         result.appendNumber("n", total);
+
+        auto* curOp = CurOp::get(opCtx);
+        curOp->setEndOfOpMetrics(kNReturned);
+
+        if (allShardMetricsReturned) {
+            collectQueryStatsMongos(opCtx, std::move(curOp->debug().queryStatsInfo.key));
+        }
+
         return true;
     }
 
@@ -230,6 +305,9 @@ public:
         Impl::checkCanExplainHere(opCtx);
 
         const BSONObj& cmdObj = request.body;
+
+        auto curOp = CurOp::get(opCtx);
+        curOp->debug().queryStatsInfo.disableForSubqueryExecution = true;
 
         CountCommandRequest countRequest(NamespaceStringOrUUID(NamespaceString{}));
         try {

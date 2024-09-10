@@ -71,7 +71,7 @@ commands:
             query:
                 description: "A query that selects which documents to count in the collection or
                 view."
-                type: object
+                type: object_owned
                 default: BSONObj()
                 stability: stable
             limit:
@@ -93,7 +93,7 @@ commands:
                 stability: stable
             collation:
                 description: "The collation to use in the count command."
-                type: object
+                type: object_owned
                 optional: true
                 stability: stable
             fields:
@@ -115,3 +115,7 @@ commands:
                 type: uuid
                 optional: true
                 stability: unstable
+            includeQueryStatsMetrics:
+                description: "Indicates whether or not query stats metrics should be included in the response."
+                type: optionalBool
+                stability: internal

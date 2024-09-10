@@ -83,6 +83,10 @@
 #include "mongo/db/query/plan_summary_stats.h"
 #include "mongo/db/query/query_planner_params.h"
 #include "mongo/db/query/query_settings/query_settings_utils.h"
+#include "mongo/db/query/query_shape/distinct_cmd_shape.h"
+#include "mongo/db/query/query_shape/query_shape.h"
+#include "mongo/db/query/query_stats/distinct_key.h"
+#include "mongo/db/query/query_stats/query_stats.h"
 #include "mongo/db/query/view_response_formatter.h"
 #include "mongo/db/read_concern_support_result.h"
 #include "mongo/db/repl/read_concern_args.h"
@@ -116,6 +120,7 @@ namespace {
 
 std::unique_ptr<CanonicalQuery> parseDistinctCmd(
     OperationContext* opCtx,
+    const CollectionOrViewAcquisition& collOrViewAcquisition,
     const NamespaceString& nss,
     const BSONObj& cmdObj,
     const ExtensionsCallback& extensionsCallback,
@@ -144,10 +149,25 @@ std::unique_ptr<CanonicalQuery> parseDistinctCmd(
 
     auto parsedDistinct =
         parsed_distinct_command::parse(expCtx,
-                                       cmdObj,
                                        std::move(distinctCommand),
                                        extensionsCallback,
                                        MatchExpressionParser::kAllowAllSpecialFeatures);
+
+    // We do not collect queryStats on explain for distinct.
+    if (feature_flags::gFeatureFlagQueryStatsCountDistinct.isEnabled(
+            serverGlobalParams.featureCompatibility.acquireFCVSnapshot()) &&
+        !verbosity.has_value()) {
+        query_stats::registerRequest(opCtx, nss, [&]() {
+            return std::make_unique<query_stats::DistinctKey>(
+                expCtx, *parsedDistinct, collOrViewAcquisition.getCollectionType());
+        });
+
+        if (parsedDistinct->distinctCommandRequest->getIncludeQueryStatsMetrics() &&
+            feature_flags::gFeatureFlagQueryStatsDataBearingNodes.isEnabled(
+                serverGlobalParams.featureCompatibility.acquireFCVSnapshot())) {
+            CurOp::get(opCtx)->debug().queryStatsInfo.metricsRequested = true;
+        }
+    }
 
     // TODO: SERVER-73632 Remove feature flag for PM-635.
     // Query settings will only be looked up on mongos and therefore should be part of command body
@@ -333,8 +353,13 @@ public:
             ? collectionOrView->getCollectionPtr()->getDefaultCollator()
             : nullptr;
 
-        auto canonicalQuery = parseDistinctCmd(
-            opCtx, nss, cmdObj, ExtensionsCallbackReal(opCtx, &nss), defaultCollator, verbosity);
+        auto canonicalQuery = parseDistinctCmd(opCtx,
+                                               *collectionOrView,
+                                               nss,
+                                               cmdObj,
+                                               ExtensionsCallbackReal(opCtx, &nss),
+                                               defaultCollator,
+                                               verbosity);
 
         if (collectionOrView->isView()) {
             // Relinquish locks. The aggregation command will re-acquire them.
@@ -425,8 +450,13 @@ public:
             ? collectionOrView->getCollectionPtr()->getDefaultCollator()
             : nullptr;
 
-        auto canonicalQuery = parseDistinctCmd(
-            opCtx, nss, cmdObj, ExtensionsCallbackReal(opCtx, &nss), defaultCollation, {});
+        auto canonicalQuery = parseDistinctCmd(opCtx,
+                                               *collectionOrView,
+                                               nss,
+                                               cmdObj,
+                                               ExtensionsCallbackReal(opCtx, &nss),
+                                               defaultCollation,
+                                               {});
         const CanonicalDistinct& canonicalDistinct = *canonicalQuery->getDistinct();
 
         if (canonicalDistinct.isMirrored()) {
@@ -527,7 +557,9 @@ public:
         if (collection) {
             CollectionQueryInfo::get(collection).notifyOfQuery(opCtx, collection, stats);
         }
+
         curOp->debug().setPlanSummaryMetrics(std::move(stats));
+        curOp->setEndOfOpMetrics(values.size());
 
         if (curOp->shouldDBProfile()) {
             auto&& [stats, _] =
@@ -549,6 +581,24 @@ public:
         }
 
         uassert(31299, "distinct too big, 16mb cap", result.len() < kMaxResponseSize);
+
+        auto* cq = executor->getCanonicalQuery();
+        collectQueryStatsMongod(
+            opCtx, cq->getExpCtx(), std::move(curOp->debug().queryStatsInfo.key));
+
+        // Include queryStats metrics in the result to be sent to mongos.
+        const bool includeMetrics = CurOp::get(opCtx)->debug().queryStatsInfo.metricsRequested;
+
+        if (includeMetrics) {
+            auto metrics = CurOp::get(opCtx)->debug().getCursorMetrics().toBSON();
+
+            // Only append the metrics if they were requested and they do not cause the result to
+            // exceed max size.
+            if (result.len() + metrics.objsize() < kMaxResponseSize) {
+                result.append("metrics", metrics);
+            }
+        }
+
         return true;
     }
 
@@ -585,6 +635,13 @@ public:
             viewAggCmd, vts, verbosity, serializationContext);
         viewAggRequest.setQuerySettings(canonicalQuery->getExpCtx()->getQuerySettings());
 
+        auto curOp = CurOp::get(opCtx);
+
+        // We must store the key in distinct to prevent collecting query stats when the aggregation
+        // runs.
+        auto ownedQueryStatsKey = std::move(curOp->debug().queryStatsInfo.key);
+        curOp->debug().queryStatsInfo.disableForSubqueryExecution = true;
+
         // If running explain distinct on view, then aggregate is executed without privilege checks
         // and without response formatting.
         if (verbosity) {
@@ -618,8 +675,21 @@ public:
 
         // Reset the builder state, as the response will be written to the same builder.
         resultBuilder.resetToEmpty();
+
+        // Include queryStats metrics in the result to be sent to mongos. While most views for
+        // distinct on mongos will run through an aggregate pipeline on mongos, views on collections
+        // that can be read completely locally, such as non-existent database collections or
+        // unsplittable collections, will run through this distinct path on mongod and return
+        // metrics back to mongos.
+        const bool includeMetrics = curOp->debug().queryStatsInfo.metricsRequested;
+        boost::optional<BSONObj> metrics = includeMetrics
+            ? boost::make_optional(curOp->debug().getCursorMetrics().toBSON())
+            : boost::none;
         uassertStatusOK(
-            responseFormatter.appendAsDistinctResponse(&resultBuilder, dbName.tenantId()));
+            responseFormatter.appendAsDistinctResponse(&resultBuilder, dbName.tenantId(), metrics));
+
+        curOp->setEndOfOpMetrics(resultBuilder.asTempObj().getObjectField("values").nFields());
+        collectQueryStatsMongod(opCtx, canonicalQuery->getExpCtx(), std::move(ownedQueryStatsKey));
     }
 
     void appendMirrorableRequest(BSONObjBuilder* bob, const BSONObj& cmdObj) const override {

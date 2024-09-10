@@ -72,6 +72,8 @@
 #include "mongo/db/query/query_settings/query_settings_utils.h"
 #include "mongo/db/query/query_shape/distinct_cmd_shape.h"
 #include "mongo/db/query/query_shape/query_shape.h"
+#include "mongo/db/query/query_stats/distinct_key.h"
+#include "mongo/db/query/query_stats/query_stats.h"
 #include "mongo/db/query/view_response_formatter.h"
 #include "mongo/db/read_concern_support_result.h"
 #include "mongo/db/repl/read_concern_args.h"
@@ -90,6 +92,7 @@
 #include "mongo/s/cluster_commands_helpers.h"
 #include "mongo/s/commands/query_cmd/cluster_explain.h"
 #include "mongo/s/grid.h"
+#include "mongo/s/query/exec/cluster_cursor_manager.h"
 #include "mongo/s/query/planner/cluster_aggregate.h"
 #include "mongo/s/transaction_router.h"
 #include "mongo/util/assert_util.h"
@@ -131,10 +134,18 @@ std::unique_ptr<CanonicalQuery> parseDistinctCmd(
 
     auto parsedDistinct =
         parsed_distinct_command::parse(expCtx,
-                                       cmdObj,
                                        std::move(distinctCommand),
                                        extensionsCallback,
                                        MatchExpressionParser::kAllowAllSpecialFeatures);
+
+    // We do not collect queryStats on explain for distinct.
+    if (feature_flags::gFeatureFlagQueryStatsCountDistinct.isEnabled(
+            serverGlobalParams.featureCompatibility.acquireFCVSnapshot()) &&
+        !verbosity.has_value()) {
+        query_stats::registerRequest(opCtx, nss, [&]() {
+            return std::make_unique<query_stats::DistinctKey>(expCtx, *parsedDistinct);
+        });
+    }
 
     expCtx->setQuerySettingsIfNotPresent(
         query_settings::lookupQuerySettingsForDistinct(expCtx, *parsedDistinct, nss));
@@ -143,16 +154,23 @@ std::unique_ptr<CanonicalQuery> parseDistinctCmd(
                                                         std::move(parsedDistinct));
 }
 
-BSONObj prepareDistinctForPassthrough(const BSONObj& cmd, const query_settings::QuerySettings& qs) {
+BSONObj prepareDistinctForPassthrough(const BSONObj& cmd,
+                                      const query_settings::QuerySettings& qs,
+                                      const bool requestQueryStats) {
     const auto qsBson = qs.toBSON();
-    if (qsBson.isEmpty()) {
-        return CommandHelpers::filterCommandRequestForPassthrough(cmd);
+    if (requestQueryStats || !qsBson.isEmpty()) {
+        BSONObjBuilder bob(cmd);
+        // Append distinct command with the query settings and includeQueryStatsMetrics if needed.
+        if (requestQueryStats) {
+            bob.append("includeQueryStatsMetrics", true);
+        }
+        if (!qsBson.isEmpty()) {
+            bob.append("querySettings", qsBson);
+        }
+        return CommandHelpers::filterCommandRequestForPassthrough(bob.done());
     }
 
-    // Append distinct command with the query settings.
-    BSONObjBuilder bob(cmd);
-    bob.append("querySettings", qsBson);
-    return CommandHelpers::filterCommandRequestForPassthrough(bob.done());
+    return CommandHelpers::filterCommandRequestForPassthrough(cmd);
 }
 
 class DistinctCmd : public BasicCommand {
@@ -281,17 +299,27 @@ public:
 
         auto swCri = getCollectionRoutingInfoForTxnCmd(opCtx, nss);
         if (swCri == ErrorCodes::NamespaceNotFound) {
-            // If the database doesn't exist, we successfully return an empty result set without
-            // creating a cursor.
+            // If the database doesn't exist, we successfully return an empty result set.
             result.appendArray("values", BSONObj());
+            CurOp::get(opCtx)->setEndOfOpMetrics(0);
+            collectQueryStatsMongos(opCtx,
+                                    std::move(CurOp::get(opCtx)->debug().queryStatsInfo.key));
             return true;
         }
 
-        BSONObj distinctReadyForPassthrough =
-            prepareDistinctForPassthrough(cmdObj, canonicalQuery->getExpCtx()->getQuerySettings());
+        // Users cannot set 'includeQueryStatsMetrics' for distinct commands on mongos.
+        // We will decide if remote query stats metrics should be collected.
+        bool requestQueryStats =
+            query_stats::shouldRequestRemoteMetrics(CurOp::get(opCtx)->debug());
+
+        BSONObj distinctReadyForPassthrough = prepareDistinctForPassthrough(
+            cmdObj, canonicalQuery->getExpCtx()->getQuerySettings(), requestQueryStats);
 
         const auto cri = uassertStatusOK(std::move(swCri));
         const auto& cm = cri.cm;
+
+        // This boolean will always remain true if shard metrics were not requested.
+        bool allShardMetricsReturned = true;
         std::vector<AsyncRequestsSender::Response> shardResponses;
         try {
             shardResponses = scatterGatherVersionedTargetByRoutingTable(
@@ -346,6 +374,19 @@ public:
                 temp.appendAs(nxt, "");
                 all.insert(temp.obj());
             }
+
+            if (requestQueryStats) {
+                BSONElement shardMetrics = res["metrics"];
+
+                // If we requested query stats and any of the shard responses did not include
+                // metrics, the flag should be set to false so query stats are not collected later.
+                allShardMetricsReturned &= shardMetrics.isABSONObj();
+                if (allShardMetricsReturned) {
+                    auto metrics =
+                        CursorMetrics::parse(IDLParserContext("CursorMetrics"), shardMetrics.Obj());
+                    CurOp::get(opCtx)->debug().additiveMetrics.aggregateCursorMetrics(metrics);
+                }
+            }
         }
 
         BSONObjBuilder b(32);
@@ -362,6 +403,16 @@ public:
             result.append("atClusterTime"_sd,
                           repl::ReadConcernArgs::get(opCtx).getArgsAtClusterTime()->asTimestamp());
         }
+
+        CurOp::get(opCtx)->setEndOfOpMetrics(n);
+
+        // Collect query stats if all shards returned metrics when requested or if metrics were
+        // never requested from shards.
+        if (allShardMetricsReturned) {
+            collectQueryStatsMongos(opCtx,
+                                    std::move(CurOp::get(opCtx)->debug().queryStatsInfo.key));
+        }
+
         return true;
     }
 
@@ -391,6 +442,13 @@ public:
             viewAggRequest.setQuerySettings(querySettings);
         }
 
+        auto curOp = CurOp::get(opCtx);
+
+        // We must store the key in distinct to prevent collecting query stats when the aggregation
+        // runs.
+        auto ownedQueryStatsKey = std::move(curOp->debug().queryStatsInfo.key);
+        curOp->debug().queryStatsInfo.disableForSubqueryExecution = true;
+
         // If running explain distinct on view, then aggregate is executed without plivilege checks
         // and without response formatting.
         if (verbosity) {
@@ -414,6 +472,9 @@ public:
         // Reset the builder state, as the response will be written to the same builder.
         bob.resetToEmpty();
         uassertStatusOK(responseFormatter.appendAsDistinctResponse(&bob, dbName.tenantId()));
+
+        curOp->setEndOfOpMetrics(bob.asTempObj().getObjectField("values").nFields());
+        collectQueryStatsMongos(opCtx, std::move(ownedQueryStatsKey));
     }
 };
 MONGO_REGISTER_COMMAND(DistinctCmd).forRouter();

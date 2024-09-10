@@ -64,7 +64,7 @@ TEST_F(QueryStatsTest, TwoRegisterRequestsWithSameOpCtxRateLimitedFirstCall) {
 
     RAIIServerParameterControllerForTest controller("featureFlagQueryStats", true);
     auto& opDebug = CurOp::get(*opCtx)->debug();
-    ASSERT_EQ(opDebug.queryStatsInfo.wasRateLimited, false);
+    ASSERT_EQ(opDebug.queryStatsInfo.disableForSubqueryExecution, false);
 
     // First call to registerRequest() should be rate limited.
     QueryStatsStoreManager::getRateLimiter(opCtx->getServiceContext()) =
@@ -76,7 +76,7 @@ TEST_F(QueryStatsTest, TwoRegisterRequestsWithSameOpCtxRateLimitedFirstCall) {
 
     // Since the query was rate limited, no key should have been created.
     ASSERT(opDebug.queryStatsInfo.key == nullptr);
-    ASSERT_EQ(opDebug.queryStatsInfo.wasRateLimited, true);
+    ASSERT_EQ(opDebug.queryStatsInfo.disableForSubqueryExecution, true);
 
     // Second call should not be rate limited.
     QueryStatsStoreManager::getRateLimiter(opCtx->getServiceContext())
@@ -90,7 +90,7 @@ TEST_F(QueryStatsTest, TwoRegisterRequestsWithSameOpCtxRateLimitedFirstCall) {
 
     // queryStatsKey should not be created for previously rate limited query.
     ASSERT(opDebug.queryStatsInfo.key == nullptr);
-    ASSERT_EQ(opDebug.queryStatsInfo.wasRateLimited, true);
+    ASSERT_EQ(opDebug.queryStatsInfo.disableForSubqueryExecution, true);
     ASSERT_FALSE(opDebug.queryStatsInfo.keyHash.has_value());
 }
 
@@ -152,8 +152,8 @@ TEST_F(QueryStatsTest, TwoRegisterRequestsWithSameOpCtxDisabledBetween) {
 
         // queryStatsKey should not be created since we have a size budget of 0.
         ASSERT(opDebug.queryStatsInfo.key == nullptr);
-        // This is not a rate limit, but rather a lack of space rendering it entirely disabled.
-        ASSERT_FALSE(opDebug.queryStatsInfo.wasRateLimited);
+        // Query stats are disabled by a lack of space, not by being a on a subquery path.
+        ASSERT_EQ(opDebug.queryStatsInfo.disableForSubqueryExecution, false);
 
         // Interestingly, we purposefully leave the hash value around on the OperationContext after
         // the previous operation finishes. This is because we think it may have value in being
