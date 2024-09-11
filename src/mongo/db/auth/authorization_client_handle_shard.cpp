@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2022-present MongoDB, Inc.
+ *    Copyright (C) 2024-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -27,16 +27,21 @@
  *    it in the license file.
  */
 
-#include <string>
-
-#include "mongo/base/init.h"  // IWYU pragma: keep
-#include "mongo/base/initializer.h"
+#include "mongo/db/auth/authorization_client_handle_shard.h"
+#include "mongo/bson/bsonobjbuilder.h"
+#include "mongo/db/dbdirectclient.h"
 
 namespace mongo {
-namespace {
-MONGO_INITIALIZER_GENERAL(CoreOptions_Store,
-                          ("BeginStartupOptionStorage"),
-                          ("EndStartupOptionStorage"))
-(InitializerContext* context) {}
-}  // namespace
+
+StatusWith<BSONObj> AuthorizationClientHandleShard::runAuthorizationReadCommand(
+    OperationContext* opCtx, const DatabaseName& dbname, const BSONObj& command) {
+    DBDirectClient client(opCtx);
+    BSONObj response;
+    if (!client.runCommand(dbname, std::move(command), response)) {
+        return getErrorStatusFromCommandResult(response);
+    }
+
+    return response;
+}
+
 }  // namespace mongo

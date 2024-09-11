@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2018-present MongoDB, Inc.
+ *    Copyright (C) 2024-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -29,19 +29,24 @@
 
 #pragma once
 
+#include "mongo/bson/bsonobj.h"
+#include "mongo/db/auth/authorization_client_handle.h"
+#include "mongo/db/database_name.h"
+#include "mongo/db/operation_context.h"
+#include "mongo/db/service_context.h"
+
 namespace mongo {
 
-/**
- * checks up call tree
- * if any method on top of me is a constructor, return true
- * may do internal caching
- * probably slow, use with care
- * if not implemented for a platform, returns false
- */
-bool inConstructorChain(bool printOffending = false);
+class AuthorizationClientHandleShard : public AuthorizationClientHandle {
+    AuthorizationClientHandleShard(const AuthorizationClientHandleShard&) = delete;
+    AuthorizationClientHandleShard& operator=(const AuthorizationClientHandleShard&) = delete;
 
-/**
- * @return if supported on platform, compile options may still prevent it from working
- */
-bool inConstructorChainSupported();
+    StatusWith<BSONObj> runAuthorizationReadCommand(OperationContext* opCtx,
+                                                    const DatabaseName& dbname,
+                                                    const BSONObj& command) final;
+
+public:
+    AuthorizationClientHandleShard() = default;
+};
+
 }  // namespace mongo

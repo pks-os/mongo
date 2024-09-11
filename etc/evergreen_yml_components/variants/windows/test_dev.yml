@@ -42,13 +42,13 @@ variables:
     push_bucket: downloads.10gen.com
     push_name: windows
     push_arch: x86_64-enterprise
-    test_flags: --excludeWithAnyTags=incompatible_with_windows_tls
+    test_flags: --excludeWithAnyTags=incompatible_with_windows_tls,requires_latch_analyzer
     external_auth_jobs_max: 1
 
 buildvariants:
   - name: &windows-compile-required windows-compile-required
     display_name: "! Windows Server 2022 Enterprise Compile"
-    tags: ["required", "bazel_check"]
+    tags: ["required", "bazel_check", "forbid_tasks_tagged_with_experimental"]
     run_on:
       - windows-2022-xxlarge
     activate: true # These compile variants run on every commit to reduce latency of the auto-reverter.
@@ -88,7 +88,7 @@ buildvariants:
     <<: *windows_compile_variant_dependency
     name: &enterprise-windows-all-feature-flags-required enterprise-windows-all-feature-flags-required
     display_name: "! Enterprise Windows Server 2022 (all feature flags) essential tasks"
-    tags: ["required"]
+    tags: ["required", "forbid_tasks_tagged_with_experimental"]
     cron: "0 */4 * * *" # From the ${project_required_suggested_cron} parameter
     run_on:
       - windows-2022-small
@@ -109,7 +109,7 @@ buildvariants:
       # buildscripts/resmokeconfig/fully_disabled_feature_flags.yml
       test_flags: >-
         --runAllFeatureFlagTests
-        --excludeWithAnyTags=incompatible_with_windows_tls
+        --excludeWithAnyTags=incompatible_with_windows_tls,requires_latch_analyzer
       external_auth_jobs_max: 1
       # Uncomment expansion and `burn_in_tasks_gen` task below and add resmoke task name to burn-in.
       # WARNING! Task splitting is not supported for burn-in tasks. Large unsplitted `_gen` tasks may
@@ -159,7 +159,7 @@ buildvariants:
       # buildscripts/resmokeconfig/fully_disabled_feature_flags.yml
       test_flags: >-
         --runAllFeatureFlagTests
-        --excludeWithAnyTags=incompatible_with_windows_tls
+        --excludeWithAnyTags=incompatible_with_windows_tls,requires_latch_analyzer
       external_auth_jobs_max: 1
       # Uncomment expansion and `burn_in_tasks_gen` task below and add resmoke task name to burn-in.
       # WARNING! Task splitting is not supported for burn-in tasks. Large unsplitted `_gen` tasks may

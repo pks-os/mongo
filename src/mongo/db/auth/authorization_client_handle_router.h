@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2018-present MongoDB, Inc.
+ *    Copyright (C) 2024-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -29,42 +29,24 @@
 
 #pragma once
 
-#include "mongo/base/data_cursor.h"
-#include "mongo/platform/basic.h"
+#include "mongo/bson/bsonobj.h"
+#include "mongo/db/auth/authorization_client_handle.h"
+#include "mongo/db/database_name.h"
+#include "mongo/db/operation_context.h"
 
 namespace mongo {
-/** a simple, rather dumb, but very fast checksum.  see perftests.cpp for unit tests. */
-struct Checksum {
-    union {
-        unsigned char bytes[16];
-        unsigned long long words[2];
-    };
 
-    // if you change this you must bump dur::CurrentVersion
-    void gen(const void* buf, unsigned len) {
-        unsigned n = len / 8 / 2;
-        ConstDataCursor cdc(static_cast<const char*>(buf));
-        uint64_t a = 0;
-        for (unsigned i = 0; i < n; i++) {
-            a += (cdc.readAndAdvance<LittleEndian<uint64_t>>() ^ i);
-        }
-        uint64_t b = 0;
-        for (unsigned i = 0; i < n; i++) {
-            b += (cdc.readAndAdvance<LittleEndian<uint64_t>>() ^ i);
-        }
-        uint64_t c = 0;
-        for (unsigned i = n * 2 * 8; i < len; i++) {  // 0-7 bytes left
-            c = (c << 8) | ((const signed char*)buf)[i];
-        }
-        words[0] = a ^ len;
-        words[1] = b ^ c;
-    }
+class AuthorizationClientHandleRouter : public AuthorizationClientHandle {
+public:
+    AuthorizationClientHandleRouter() = default;
 
-    bool operator==(const Checksum& rhs) const {
-        return words[0] == rhs.words[0] && words[1] == rhs.words[1];
-    }
-    bool operator!=(const Checksum& rhs) const {
-        return words[0] != rhs.words[0] || words[1] != rhs.words[1];
-    }
+protected:
+    AuthorizationClientHandleRouter(const AuthorizationClientHandleRouter&) = delete;
+    AuthorizationClientHandleRouter& operator=(const AuthorizationClientHandleRouter&) = delete;
+
+    StatusWith<BSONObj> runAuthorizationReadCommand(OperationContext* opCtx,
+                                                    const DatabaseName& dbname,
+                                                    const BSONObj& command) final;
 };
+
 }  // namespace mongo

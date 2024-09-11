@@ -29,6 +29,7 @@
 
 #pragma once
 
+#include "mongo/db/auth/authorization_client_handle.h"
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/auth/authorization_manager_factory.h"
 #include "mongo/db/service_context.h"
@@ -46,6 +47,9 @@ class AuthorizationManagerFactoryMock : public AuthorizationManagerFactory {
 public:
     std::unique_ptr<AuthorizationManager> createRouter(Service* service) override;
     std::unique_ptr<AuthorizationManager> createShard(Service* service) override;
+
+    std::unique_ptr<AuthorizationClientHandle> createClientHandleRouter(Service* service) override;
+    std::unique_ptr<AuthorizationClientHandle> createClientHandleShard(Service* service) override;
 };
 
 
