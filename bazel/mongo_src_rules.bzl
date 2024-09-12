@@ -1273,17 +1273,6 @@ def force_includes_copt(package_name, name):
             "//conditions:default": ["-include", basic_h],
         })
 
-    if package_name.startswith("src/third_party/mozjs"):
-        return select({
-            "//bazel/config:linux_aarch64": ["-include", "third_party/mozjs/platform/aarch64/linux/build/js-confdefs.h"],
-            "//bazel/config:linux_ppc64le": ["-include", "third_party/mozjs/platform/ppc64le/linux/build/js-confdefs.h"],
-            "//bazel/config:linux_s390x": ["-include", "third_party/mozjs/platform/s390x/linux/build/js-confdefs.h"],
-            "//bazel/config:linux_x86_64": ["-include", "third_party/mozjs/platform/x86_64/linux/build/js-confdefs.h"],
-            "//bazel/config:macos_aarch64": ["-include", "third_party/mozjs/platform/aarch64/macOS/build/js-confdefs.h"],
-            "//bazel/config:macos_x86_64": ["-include", "third_party/mozjs/platform/x86_64/macOS/build/js-confdefs.h"],
-            "//bazel/config:windows_x86_64": ["/FI", "third_party/mozjs/platform/x86_64/windows/build/js-confdefs.h"],
-        })
-
     if name in ["scripting", "scripting_mozjs_test", "encrypted_dbclient"]:
         return select({
             "//bazel/config:linux_aarch64": ["-include", "third_party/mozjs/platform/aarch64/linux/build/js-config.h"],
@@ -1305,17 +1294,6 @@ def force_includes_hdr(package_name, name):
                 "//src/mongo/platform:windows_basic.h",
             ],
             "//conditions:default": ["//src/mongo/platform:basic.h"],
-        })
-
-    if package_name.startswith("src/third_party/mozjs"):
-        return select({
-            "//bazel/config:linux_aarch64": ["//src/third_party/mozjs:platform/aarch64/linux/build/js-confdefs.h"],
-            "//bazel/config:linux_ppc64le": ["//src/third_party/mozjs:platform/ppc64le/linux/build/js-confdefs.h"],
-            "//bazel/config:linux_s390x": ["//src/third_party/mozjs:platform/s390x/linux/build/js-confdefs.h"],
-            "//bazel/config:linux_x86_64": ["//src/third_party/mozjs:platform/x86_64/linux/build/js-confdefs.h"],
-            "//bazel/config:macos_aarch64": ["//src/third_party/mozjs:platform/aarch64/macOS/build/js-confdefs.h"],
-            "//bazel/config:macos_x86_64": ["//src/third_party/mozjs:platform/x86_64/macOS/build/js-confdefs.h"],
-            "//bazel/config:windows_x86_64": ["//src/third_party/mozjs:/platform/x86_64/windows/build/js-confdefs.h"],
         })
 
     if name in ["scripting", "scripting_mozjs_test", "encrypted_dbclient"]:
@@ -1347,6 +1325,7 @@ def mongo_cc_library(
         name,
         srcs = [],
         hdrs = [],
+        textual_hdrs = [],
         deps = [],
         header_deps = [],
         testonly = False,
@@ -1371,6 +1350,8 @@ def mongo_cc_library(
       name: The name of the library the target is compiling.
       srcs: The source files to build.
       hdrs: The headers files of the target library.
+      textual_hdrs: Textual headers. Might be used to include cpp files without
+        compiling them.
       deps: The targets the library depends on.
       header_deps: The targets the library depends on only for headers, omits
         linking.
@@ -1478,11 +1459,10 @@ def mongo_cc_library(
 
     create_link_deps(
         name = name + LINK_DEP_SUFFIX,
+        target_name = name,
         link_deps = [name] + deps,
-        target_compatible_with = select({
-            "//bazel/config:scons_query_enabled": [],
-            "//conditions:default": ["@platforms//:incompatible"],
-        }) + target_compatible_with + enterprise_compatible,
+        tags = ["scons_link_lists"],
+        target_compatible_with = target_compatible_with + enterprise_compatible,
     )
 
     # Create a cc_library entry to generate a shared archive of the target.
@@ -1491,6 +1471,7 @@ def mongo_cc_library(
         srcs = srcs + SANITIZER_DENYLIST_HEADERS,
         hdrs = hdrs + fincludes_hdr + MONGO_GLOBAL_ACCESSIBLE_HEADERS,
         deps = deps + [name + HEADER_DEP_SUFFIX],
+        textual_hdrs = textual_hdrs,
         visibility = visibility,
         testonly = testonly,
         copts = MONGO_GLOBAL_COPTS + package_specific_copts + copts + fincludes_copt,
@@ -1513,6 +1494,7 @@ def mongo_cc_library(
         srcs = srcs + SANITIZER_DENYLIST_HEADERS,
         hdrs = hdrs + fincludes_hdr + MONGO_GLOBAL_ACCESSIBLE_HEADERS,
         deps = deps + [name + HEADER_DEP_SUFFIX],
+        textual_hdrs = textual_hdrs,
         visibility = visibility,
         testonly = testonly,
         copts = MONGO_GLOBAL_COPTS + package_specific_copts + copts + fincludes_copt,

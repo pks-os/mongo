@@ -29,7 +29,6 @@ variables:
       -j$(grep -c ^processor /proc/cpuinfo)
       --variables-files=etc/scons/mongodbtoolchain_stable_gcc.vars
       --link-model=dynamic
-      --use-diagnostic-latches=on
 
   # THIS HAS COPIES IN:
   # - etc/evergreen_yml_components/variants/rhel/test_dev_master_branch_only.yml
@@ -163,7 +162,6 @@ buildvariants:
       - name: aggregation_sharded_collections_causally_consistent_passthrough
       - name: aggregation_sharded_collections_passthrough
       - name: auth_gen
-      - name: causally_consistent_hedged_reads_jscore_passthrough_gen
       - name: causally_consistent_jscore_passthrough_auth_gen
       - name: causally_consistent_jscore_passthrough_gen
       - name: change_streams
@@ -174,8 +172,8 @@ buildvariants:
       - name: fle2_sharding_high_cardinality
       - name: fle2_sharding
       - name: jstestfuzz_sharded_causal_consistency_gen
-      - name: jstestfuzz_sharded_continuous_stepdown_gen
       - name: jstestfuzz_sharded_gen
+      - name: jstestfuzz_sharded_kill_terminate_stepdown_gen
       - name: jstestfuzz_sharded_session_gen
       - name: sharded_causally_consistent_jscore_passthrough_gen
       - name: sharded_causally_consistent_read_concern_snapshot_passthrough_gen

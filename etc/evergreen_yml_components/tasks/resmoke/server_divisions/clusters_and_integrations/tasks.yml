@@ -248,20 +248,6 @@ tasks:
           resmoke_jobs_max: 1
 
   - <<: *gen_task_template
-    name: causally_consistent_hedged_reads_jscore_passthrough_gen
-    tags:
-      [
-        "assigned_to_jira_team_server_servicearch",
-        "release_critical",
-        "incompatible_mac",
-        "causally_consistent",
-        "sharding",
-        "jscore",
-      ]
-    commands:
-      - func: "generate resmoke tasks"
-
-  - <<: *gen_task_template
     name: concurrency_multitenancy_with_atlas_proxy_jscore_passthrough_gen
     # TODO(SERVER-70015) remove "incompatible_debug_mode" tag
     tags:
@@ -2618,7 +2604,7 @@ tasks:
 
   ## jstestfuzz concurrent sharded cluster continuous stepdown ##
   - <<: *jstestfuzz_template
-    name: jstestfuzz_concurrent_sharded_continuous_stepdown_gen
+    name: jstestfuzz_concurrent_sharded_kill_terminate_stepdown_gen
     # TODO(SERVER-69996) remove "incompatible_debug_mode" tag
     tags:
       [
@@ -2627,6 +2613,7 @@ tasks:
         "jstestfuzz",
         "non_deterministic",
         "stepdowns",
+        "kill_terminate",
         "require_npm",
         "random_name",
       ]
@@ -2637,12 +2624,12 @@ tasks:
           num_files: ${jstestfuzz_concurrent_num_files|10}
           num_tasks: 2
           jstestfuzz_vars: --jsTestsDir ../jstests
-          suite: jstestfuzz_sharded_continuous_stepdown
+          suite: jstestfuzz_sharded_kill_terminate_stepdown
           resmoke_args: --numClientsPerFixture=10
 
   ## config fuzzer jstestfuzz concurrent sharded cluster continuous stepdown ##
   - <<: *jstestfuzz_template
-    name: config_fuzzer_jstestfuzz_concurrent_sharded_continuous_stepdown_gen
+    name: config_fuzzer_jstestfuzz_concurrent_sharded_kill_terminate_stepdown_gen
     # TODO(SERVER-69996) remove "incompatible_debug_mode" tag
     tags:
       [
@@ -2657,6 +2644,7 @@ tasks:
         "require_npm",
         "random_name",
         "stepdowns",
+        "kill_terminate",
       ]
     commands:
       - func: "generate resmoke tasks"
@@ -2665,7 +2653,7 @@ tasks:
           num_files: ${jstestfuzz_concurrent_num_files|10}
           num_tasks: 2
           jstestfuzz_vars: --jsTestsDir ../jstests
-          suite: jstestfuzz_sharded_continuous_stepdown
+          suite: jstestfuzz_sharded_kill_terminate_stepdown
           resmoke_args: >-
             --numClientsPerFixture=10
             --fuzzMongodConfigs=normal
@@ -2745,7 +2733,7 @@ tasks:
 
   ## jstestfuzz sharded cluster continuous stepdown ##
   - <<: *jstestfuzz_template
-    name: jstestfuzz_sharded_continuous_stepdown_gen
+    name: jstestfuzz_sharded_kill_terminate_stepdown_gen
     # TODO(SERVER-69996) remove "incompatible_debug_mode" tag
     tags:
       [
@@ -2754,6 +2742,7 @@ tasks:
         "jstestfuzz",
         "non_deterministic",
         "stepdowns",
+        "kill_terminate",
         "require_npm",
         "random_name",
       ]
@@ -2764,7 +2753,7 @@ tasks:
           num_files: 5
           num_tasks: 5
           jstestfuzz_vars: --jsTestsDir ../jstests
-          suite: jstestfuzz_sharded_continuous_stepdown
+          suite: jstestfuzz_sharded_kill_terminate_stepdown
           resmoke_args: "--mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
 
   ## jstestfuzz sharded cluster ##
