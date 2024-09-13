@@ -12,46 +12,6 @@ Import(
 
 env = env.Clone()
 
-if "ldap" in env.get("MONGO_ENTERPRISE_FEATURES", []):
-    ldapconf = Configure(env)
-
-    if env.TargetOSIs("windows"):
-        ldapconf.env["MONGO_LDAP_LIB"] = ["Wldap32"]
-    else:
-        have_ldap_h = ldapconf.CheckLibWithHeader(
-            "ldap",
-            ["ldap.h"],
-            "C",
-            'ldap_is_ldap_url("ldap://127.0.0.1");',
-            autoadd=False,
-        )
-
-        have_lber_h = ldapconf.CheckLibWithHeader(
-            "lber",
-            ["lber.h"],
-            "C",
-            "ber_free(NULL, 0);",
-            autoadd=False,
-        )
-
-        if have_ldap_h:
-            ldapconf.env.AppendUnique(MONGO_LDAP_LIB=["ldap"])
-        else:
-            env.ConfError(
-                "Could not find <ldap.h> and ldap library from OpenLDAP, "
-                "required for LDAP authorization in the enterprise build"
-            )
-
-        if have_lber_h:
-            ldapconf.env.AppendUnique(MONGO_LDAP_LIB=["lber"])
-        else:
-            env.ConfError(
-                "Could not find <lber.h> and lber library from OpenLDAP, "
-                "required for LDAP authorizaton in the enterprise build"
-            )
-
-    env = ldapconf.Finish()
-
 env.SConscript(
     must_exist=1,
     dirs=[
@@ -93,9 +53,9 @@ env.Library(
         "$BUILD_DIR/mongo/db/commands/query_cmd/bulk_write_common",
         "$BUILD_DIR/mongo/db/fle_crud",
         "$BUILD_DIR/mongo/db/not_primary_error_tracker",
-        "$BUILD_DIR/mongo/db/ops/parsed_update",
         "$BUILD_DIR/mongo/db/pipeline/pipeline",
         "$BUILD_DIR/mongo/db/pipeline/process_interface/mongos_process_interface",
+        "$BUILD_DIR/mongo/db/query/write_ops/parsed_update",
         "$BUILD_DIR/mongo/db/storage/storage_options",
         "$BUILD_DIR/mongo/db/timeseries/timeseries_conversion_util",
         "$BUILD_DIR/mongo/db/timeseries/timeseries_metadata",
@@ -385,6 +345,9 @@ env.Library(
         "$BUILD_DIR/mongo/transport/transport_layer_manager",
         "$BUILD_DIR/mongo/util/clock_sources",
         "$BUILD_DIR/mongo/util/fail_point",
+        "$BUILD_DIR/mongo/util/latch_analyzer"
+        if get_option("use-diagnostic-latches") == "on"
+        else [],
         "$BUILD_DIR/mongo/util/net/http_client_impl",
         "$BUILD_DIR/mongo/util/net/ssl_options_server" if get_option("ssl") == "on" else "",
         "$BUILD_DIR/mongo/util/ntservice",
@@ -463,6 +426,9 @@ env.Library(
         "$BUILD_DIR/mongo/transport/session_manager",
         "$BUILD_DIR/mongo/transport/transport_layer_manager",
         "$BUILD_DIR/mongo/util/allocator_thread",
+        "$BUILD_DIR/mongo/util/latch_analyzer"
+        if get_option("use-diagnostic-latches") == "on"
+        else [],
         "$BUILD_DIR/mongo/util/periodic_runner_factory",
         "$BUILD_DIR/mongo/util/signal_handlers",
         "$BUILD_DIR/mongo/util/tracing_profiler/tracing_profiler"
@@ -658,10 +624,10 @@ env.CppUnitTest(
     LIBDEPS=[
         "$BUILD_DIR/mongo/db/auth/authmocks",
         "$BUILD_DIR/mongo/db/mongohasher",
-        "$BUILD_DIR/mongo/db/ops/parsed_update",
-        "$BUILD_DIR/mongo/db/ops/write_ops_parsers_test_helpers",
         "$BUILD_DIR/mongo/db/pipeline/process_interface/mongos_process_interface_factory",
         "$BUILD_DIR/mongo/db/query/query_test_service_context",
+        "$BUILD_DIR/mongo/db/query/write_ops/parsed_update",
+        "$BUILD_DIR/mongo/db/query/write_ops/write_ops_parsers_test_helpers",
         "$BUILD_DIR/mongo/db/repl/replmocks",
         "$BUILD_DIR/mongo/db/service_context_non_d",
         "$BUILD_DIR/mongo/db/timeseries/timeseries_conversion_util",

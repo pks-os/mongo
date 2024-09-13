@@ -14,46 +14,6 @@ Import(
 
 env = env.Clone()
 
-if "ldap" in env.get("MONGO_ENTERPRISE_FEATURES", []):
-    ldapconf = Configure(env)
-
-    if env.TargetOSIs("windows"):
-        ldapconf.env["MONGO_LDAP_LIB"] = ["Wldap32"]
-    else:
-        have_ldap_h = ldapconf.CheckLibWithHeader(
-            "ldap",
-            ["ldap.h"],
-            "C",
-            'ldap_is_ldap_url("ldap://127.0.0.1");',
-            autoadd=False,
-        )
-
-        have_lber_h = ldapconf.CheckLibWithHeader(
-            "lber",
-            ["lber.h"],
-            "C",
-            "ber_free(NULL, 0);",
-            autoadd=False,
-        )
-
-        if have_ldap_h:
-            ldapconf.env.AppendUnique(MONGO_LDAP_LIB=["ldap"])
-        else:
-            env.ConfError(
-                "Could not find <ldap.h> and ldap library from OpenLDAP, "
-                "required for LDAP authorization in the enterprise build"
-            )
-
-        if have_lber_h:
-            ldapconf.env.AppendUnique(MONGO_LDAP_LIB=["lber"])
-        else:
-            env.ConfError(
-                "Could not find <lber.h> and lber library from OpenLDAP, "
-                "required for LDAP authorizaton in the enterprise build"
-            )
-
-    env = ldapconf.Finish()
-
 # Ideally 's2' would be scoped narrowly but it is spammed in all over the place by
 # db/geo unfortunately.
 env.InjectThirdParty(
@@ -83,7 +43,6 @@ env.SConscript(
         "index",
         "matcher",
         "op_observer",
-        "ops",
         "pipeline",
         "query",
         "repl",
@@ -534,9 +493,9 @@ env.Library(
     ],
     LIBDEPS=[
         "$BUILD_DIR/mongo/crypto/encrypted_field_config",
-        "ops/write_ops_parsers",
         "pipeline/pipeline",
         "query/command_request_response",
+        "query/write_ops/write_ops_parsers",
         "transaction/transaction_api",
     ],
     LIBDEPS_PRIVATE=[
@@ -584,7 +543,7 @@ env.Library(
     ],
     LIBDEPS_PRIVATE=[
         "$BUILD_DIR/mongo/crypto/fle_crypto",
-        "$BUILD_DIR/mongo/db/ops/write_ops",
+        "$BUILD_DIR/mongo/db/query/write_ops/write_ops",
         "$BUILD_DIR/mongo/db/repl/storage_interface_impl",
         "fle_crud",
         "fle_crud_mongod",
@@ -615,7 +574,7 @@ env.Library(
     LIBDEPS=[
         "$BUILD_DIR/mongo/client/clientdriver_minimal",
         "not_primary_error_tracker",
-        "ops/write_ops_parsers",
+        "query/write_ops/write_ops_parsers",
     ],
     LIBDEPS_PRIVATE=[
         "repl/repl_coordinator_interface",
@@ -636,7 +595,7 @@ env.Library(
         "catalog/collection_crud",
         "commands/server_status_core",
         "index/index_access_method",
-        "ops/write_ops",
+        "query/write_ops/write_ops",
         "record_id_helpers",
         "shard_role",
     ],
@@ -842,7 +801,7 @@ env.Library(
         "dbdirectclient",
         "index_builds_coordinator_interface",
         "multitenancy",
-        "ops/write_ops",
+        "query/write_ops/write_ops",
         "repl/isself",
         "server_base",
         "shard_role",
@@ -931,7 +890,7 @@ env.Library(
         "commands/fsync_locked",
         "commands/server_status_core",
         "index_commands_idl",
-        "ops/write_ops",
+        "query/write_ops/write_ops",
         "query_exec",
         "record_id_helpers",
         "repl/replica_set_aware_service",
@@ -1041,9 +1000,6 @@ execEnv.Library(
         "exec/unpack_timeseries_bucket.cpp",
         "exec/update_stage.cpp",
         "exec/upsert_stage.cpp",
-        "ops/parsed_delete.cpp",
-        "ops/parsed_update.cpp",
-        "ops/update_result.cpp",
         "pipeline/document_source_cursor.cpp",
         "pipeline/document_source_geo_near_cursor.cpp",
         "pipeline/pipeline_d.cpp",
@@ -1064,6 +1020,9 @@ execEnv.Library(
         "query/classic_runtime_planner_for_sbe/single_solution_passthrough_planner.cpp",
         "query/classic_runtime_planner_for_sbe/sub_planner.cpp",
         "query/stage_builder/classic_stage_builder.cpp",
+        "query/write_ops/parsed_delete.cpp",
+        "query/write_ops/parsed_update.cpp",
+        "query/write_ops/update_result.cpp",
         "query/explain.cpp",
         "query/find.cpp",
         "query/get_executor.cpp",
@@ -1132,8 +1091,6 @@ execEnv.Library(
         "exec/working_set",
         "fts/base_fts",
         "matcher/expressions_mongod_only",
-        "ops/delete_request_idl",
-        "ops/parsed_update",
         "pipeline/pipeline",
         "query/bson/dotted_path_support",
         "query/plan_cache/query_plan_cache",
@@ -1142,6 +1099,8 @@ execEnv.Library(
         "query/query_common",
         "query/query_planner",
         "query/query_settings/query_settings",
+        "query/write_ops/delete_request_idl",
+        "query/write_ops/parsed_update",
         "session/logical_session_cache",
         "shard_filterer",
         "shard_role",
@@ -1567,6 +1526,9 @@ env.Library(
         "$BUILD_DIR/mongo/util/clock_sources",
         "$BUILD_DIR/mongo/util/elapsed_tracker",
         "$BUILD_DIR/mongo/util/fail_point",
+        "$BUILD_DIR/mongo/util/latch_analyzer"
+        if get_option("use-diagnostic-latches") == "on"
+        else [],
         "$BUILD_DIR/mongo/util/net/network",
         "$BUILD_DIR/mongo/util/ntservice",
         "$BUILD_DIR/mongo/util/options_parser/options_parser_init",
@@ -1700,6 +1662,9 @@ env.Library(
         "$BUILD_DIR/mongo/util/allocator_thread",
         "$BUILD_DIR/mongo/util/cmdline_utils/cmdline_utils",
         "$BUILD_DIR/mongo/util/concurrency/thread_pool",
+        "$BUILD_DIR/mongo/util/latch_analyzer"
+        if get_option("use-diagnostic-latches") == "on"
+        else [],
         "$BUILD_DIR/mongo/util/net/http_client_impl",
         "$BUILD_DIR/mongo/util/net/ssl_manager",
         "$BUILD_DIR/mongo/util/periodic_runner_factory",
@@ -1985,8 +1950,8 @@ if wiredtiger:
             "catalog/collection_options",
             "fle_crud",
             "fle_mocks",
-            "ops/write_ops",
             "query/query_test_service_context",
+            "query/write_ops/write_ops",
             "query_expressions",
             "repl/repl_coordinator_interface",
             "repl/replmocks",
@@ -2190,7 +2155,6 @@ if wiredtiger:
             "$BUILD_DIR/mongo/util/clock_source_mock",
             "keys_collection_client_direct",
             "keys_collection_document",
-            "op_observer/op_observer",
             "op_observer/op_observer_impl",
             "op_observer/operation_logger_impl",
             "read_write_concern_defaults_mock",

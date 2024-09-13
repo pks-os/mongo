@@ -75,7 +75,7 @@
 #include "mongo/db/op_observer/batched_write_policy.h"
 #include "mongo/db/op_observer/op_observer.h"
 #include "mongo/db/operation_context.h"
-#include "mongo/db/ops/insert.h"
+#include "mongo/db/query/write_ops/insert.h"
 #include "mongo/db/record_id.h"
 #include "mongo/db/repl/oplog.h"
 #include "mongo/db/repl/replication_coordinator.h"
@@ -138,13 +138,14 @@ Status checkSourceAndTargetNamespaces(OperationContext* opCtx,
         return {ErrorCodes::IllegalOperation,
                 "Cannot rename collections between a replicated and an unreplicated database"};
 
+    auto catalog = CollectionCatalog::get(opCtx);
+
     auto db = DatabaseHolder::get(opCtx)->getDb(opCtx, source.dbName());
-    if (!db || db->isDropPending(opCtx))
+    if (!db || catalog->isDropPending(source.dbName()))
         return Status(ErrorCodes::NamespaceNotFound,
                       str::stream() << "Database " << source.dbName().toStringForErrorMsg()
                                     << " does not exist or is drop pending");
 
-    auto catalog = CollectionCatalog::get(opCtx);
     const auto sourceColl = catalog->lookupCollectionByNamespace(opCtx, source);
     if (!sourceColl) {
         if (CollectionCatalog::get(opCtx)->lookupView(opCtx, source))

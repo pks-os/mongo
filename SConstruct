@@ -495,6 +495,14 @@ add_option(
 )
 
 add_option(
+    "use-diagnostic-latches",
+    choices=["on", "off"],
+    default="off",
+    help="Enable annotated Mutex types",
+    type="choice",
+)
+
+add_option(
     "use-tracing-profiler",
     choices=["on", "off"],
     default="off",
@@ -5359,6 +5367,42 @@ def doConfigure(myenv):
             LINKFLAGS=["-fxray-instrument"],
         )
 
+    if "ldap" in myenv.get("MONGO_ENTERPRISE_FEATURES", []):
+        if myenv.TargetOSIs("windows"):
+            conf.env["MONGO_LDAP_LIB"] = ["Wldap32"]
+        else:
+            have_ldap_h = conf.CheckLibWithHeader(
+                "ldap",
+                ["ldap.h"],
+                "C",
+                'ldap_is_ldap_url("ldap://127.0.0.1");',
+                autoadd=False,
+            )
+
+            have_lber_h = conf.CheckLibWithHeader(
+                "lber",
+                ["lber.h"],
+                "C",
+                "ber_free(NULL, 0);",
+                autoadd=False,
+            )
+
+            if have_ldap_h:
+                conf.env.AppendUnique(MONGO_LDAP_LIB=["ldap"])
+            else:
+                myenv.ConfError(
+                    "Could not find <ldap.h> and ldap library from OpenLDAP, "
+                    "required for LDAP authorization in the enterprise build"
+                )
+
+            if have_lber_h:
+                conf.env.AppendUnique(MONGO_LDAP_LIB=["lber"])
+            else:
+                myenv.ConfError(
+                    "Could not find <lber.h> and lber library from OpenLDAP, "
+                    "required for LDAP authorizaton in the enterprise build"
+                )
+
     myenv = conf.Finish()
 
     return myenv
@@ -6494,31 +6538,6 @@ elif env.GetOption("build-mongot"):
         AIB_COMPONENTS_EXTRA=["dist-test"],
     )
 
-
-# Ensure that every thin target transitively-included library is auto-installed.
-# Note that BAZEL_LIBDEPS_AUTOINSTALLED ensures we only invoke it once for each such library
-BAZEL_LIBDEPS_AUTOINSTALLED = set()
-
-
-def bazel_auto_install_emitter(target, source, env):
-    global BAZEL_LIBDEPS_AUTOINSTALLED
-
-    for libdep in env.Flatten(env.get("LIBDEPS", [])) + env.Flatten(env.get("LIBDEPS_PRIVATE", [])):
-        libdep_node = libdeps._get_node_with_ixes(env, env.Entry(libdep).abspath, "SharedLibrary")
-        if str(libdep_node.abspath) not in BAZEL_LIBDEPS_AUTOINSTALLED:
-            shlib_suffix = env.subst("$SHLIBSUFFIX")
-            env.BazelAutoInstall(libdep_node, shlib_suffix)
-            BAZEL_LIBDEPS_AUTOINSTALLED.add(str(libdep_node.abspath))
-
-    return target, source
-
-
-for builder_name in ["Program", "SharedLibrary"]:
-    builder = env["BUILDERS"][builder_name]
-    base_emitter = builder.emitter
-    new_emitter = SCons.Builder.ListEmitter([base_emitter, bazel_auto_install_emitter])
-    builder.emitter = new_emitter
-
 # load the tool late to make sure we can copy over any new
 # emitters/scanners we may have created in the SConstruct when
 # we go to make stand in bazel builders for the various scons builders
@@ -6566,8 +6585,6 @@ env.Alias("generated-sources", clang_tidy_config)
 
 if get_option("bazel-includes-info"):
     env.Tool("bazel_includes_info")
-
-env.WaitForBazel()
 
 env.SConscript(
     must_exist=1,
@@ -6635,7 +6652,6 @@ env.AlwaysBuild(cachePrune)
 # and all the other setup that happens before we begin a real graph
 # walk.
 env.Alias("configure", None)
-
 
 # We have finished all SConscripts and targets, so we can ask
 # auto_install_binaries to finalize the installation setup.
@@ -6718,3 +6734,6 @@ if env.GetOption("ninja") != "disabled" and env.get("__NINJA_NO") != "1":
     # via the emitter, this outputs a json file which will be read during the ninja
     # build.
     env.GenerateBazelInfoForNinja()
+
+else:
+    env.WaitForBazel()

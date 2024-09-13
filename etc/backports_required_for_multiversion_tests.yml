@@ -263,6 +263,8 @@ last-continuous:
       ticket: SERVER-94151
     - test_file: jstests/core/write/update/upsert_duplicate_key_retry_collation.js
       ticket: SERVER-84089
+    - test_file: jstests/replsets/max_seven_voting_members_allowed.js
+      ticket: SERVER-69418
     - test_file: jstests/core/ddl/create_indexes.js
       ticket: SERVER-90952
     - test_file: jstests/aggregation/bugs/server94212.js
@@ -275,8 +277,12 @@ last-continuous:
       ticket: SERVER-93153
     - test_file: jstests/change_streams/show_resharding_system_events.js
       ticket: SERVER-93153
+    - test_file: jstests/concurrency/fsm_workloads/query/update/upsert_unique_index_collation.js
+      ticket: SERVER-94156
     - test_file: jstests/core/timeseries/timeseries_filter_extended_range.js
       ticket: SERVER-94207
+    - test_file: jstests/sharding/explain_find_transformed_query.js
+      ticket: SERVER-82471
   suites: null
 last-lts:
   all:
@@ -554,6 +560,8 @@ last-lts:
       ticket: SERVER-94151
     - test_file: jstests/core/write/update/upsert_duplicate_key_retry_collation.js
       ticket: SERVER-84089
+    - test_file: jstests/replsets/max_seven_voting_members_allowed.js
+      ticket: SERVER-69418
     - test_file: jstests/core/ddl/create_indexes.js
       ticket: SERVER-90952
     - test_file: jstests/aggregation/bugs/server94212.js
@@ -566,6 +574,10 @@ last-lts:
       ticket: SERVER-93153
     - test_file: jstests/change_streams/show_resharding_system_events.js
       ticket: SERVER-93153
+    - test_file: jstests/concurrency/fsm_workloads/query/update/upsert_unique_index_collation.js
+      ticket: SERVER-94156
     - test_file: jstests/core/timeseries/timeseries_filter_extended_range.js
       ticket: SERVER-94207
+    - test_file: jstests/sharding/explain_find_transformed_query.js
+      ticket: SERVER-82471
   suites: null

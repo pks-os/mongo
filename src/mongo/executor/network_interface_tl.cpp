@@ -83,6 +83,36 @@
 namespace mongo {
 namespace executor {
 
+
+void OpportunisticSecondaryTargetingParameter::append(OperationContext*,
+                                                      BSONObjBuilder* b,
+                                                      StringData name,
+                                                      const boost::optional<TenantId>&) {
+    return;
+}
+
+Status OpportunisticSecondaryTargetingParameter::set(const BSONElement& newValueElement,
+                                                     const boost::optional<TenantId>&) {
+    LOGV2_WARNING(
+        9206304,
+        "Opportunistic secondary targeting has been deprecated and the "
+        "opportunisticSecondaryTargeting parameter has no effect. For more information please "
+        "see https://dochub.mongodb.org/core/hedged-reads-deprecated");
+
+    return Status::OK();
+}
+
+Status OpportunisticSecondaryTargetingParameter::setFromString(StringData modeStr,
+                                                               const boost::optional<TenantId>&) {
+    LOGV2_WARNING(
+        9206305,
+        "Opportunistic secondary targeting has been deprecated and the "
+        "opportunisticSecondaryTargeting parameter has no effect. For more information please "
+        "see https://dochub.mongodb.org/core/hedged-reads-deprecated");
+
+    return Status::OK();
+}
+
 using namespace fmt::literals;
 
 namespace {
@@ -784,8 +814,6 @@ void NetworkInterfaceTL::RequestManager::trySend(
             LOGV2(6496502,
                   "forceConnectionNetworkTimeout failpoint enabled, timing out request",
                   "request"_attr = cmdState->requestOnAny.cmdObj.toString());
-            // Sleep to make sure the elapsed wait time for connection timeout is > 1 millisecond.
-            sleepmillis(100);
             swConn =
                 Status(ErrorCodes::PooledConnectionAcquisitionExceededTimeLimit,
                        "PooledConnectionAcquisitionExceededTimeLimit triggered via fail point.");
