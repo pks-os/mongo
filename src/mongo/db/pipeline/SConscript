@@ -337,6 +337,7 @@ pipelineEnv.Library(
         "$BUILD_DIR/mongo/db/query/search/mongot_options",
         "$BUILD_DIR/mongo/db/query/search/search_index_common",
         "$BUILD_DIR/mongo/db/query/search/search_index_process_interface",
+        "$BUILD_DIR/mongo/db/query/spill_util",
         "$BUILD_DIR/mongo/db/repl/image_collection_entry",
         "$BUILD_DIR/mongo/db/shard_role_api",
         "$BUILD_DIR/mongo/db/sorter/sorter_base",
@@ -364,6 +365,7 @@ env.Benchmark(
         "document_source_mock",
         "pipeline",
     ],
+    CONSOLIDATED_TARGET="pipeline_bm",
 )
 
 env.Library(
@@ -457,6 +459,7 @@ env.Benchmark(
         "$BUILD_DIR/mongo/unittest/unittest",
         "$BUILD_DIR/mongo/util/processinfo",
     ],
+    CONSOLIDATED_TARGET="pipeline_bm",
 )
 
 env.CppUnitTest(
@@ -669,6 +672,7 @@ env.Benchmark(
     LIBDEPS=[
         "accumulator",
     ],
+    CONSOLIDATED_TARGET="pipeline_bm",
 )
 
 env.CppUnitTest(
@@ -705,6 +709,7 @@ env.Benchmark(
         "$BUILD_DIR/mongo/db/service_context_non_d",
         "accumulator",
     ],
+    CONSOLIDATED_TARGET="pipeline_bm",
 )
 
 env.Benchmark(
@@ -747,4 +752,5 @@ env.Benchmark(
         "accumulator",
         "expression_bm_fixture",
     ],
+    CONSOLIDATED_TARGET="pipeline_bm",
 )

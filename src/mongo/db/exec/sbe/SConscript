@@ -44,6 +44,7 @@ sbeEnv.Library(
         "$BUILD_DIR/mongo/db/query/bson/dotted_path_support",
         "$BUILD_DIR/mongo/db/query/random_utils",
         "$BUILD_DIR/mongo/db/query/sort_pattern",
+        "$BUILD_DIR/mongo/db/query/spill_util",
         "$BUILD_DIR/mongo/db/query/str_trim_utils",
         "$BUILD_DIR/mongo/db/query/substr_utils",
         "$BUILD_DIR/mongo/db/shard_role_api",
@@ -82,6 +83,7 @@ sbeEnv.Library(
         "stages/union.cpp",
         "stages/unique.cpp",
         "stages/unwind.cpp",
+        "stages/virtual_scan.cpp",
         "stages/window.cpp",
     ],
     LIBDEPS=[
@@ -103,6 +105,7 @@ sbeEnv.Library(
         "$BUILD_DIR/mongo/db/concurrency/lock_manager",
         "$BUILD_DIR/mongo/db/pipeline/pipeline",
         "$BUILD_DIR/mongo/db/query/bson/dotted_path_support",
+        "$BUILD_DIR/mongo/db/query/spill_util",
         "$BUILD_DIR/mongo/db/server_base",
         "$BUILD_DIR/mongo/db/sorter/sorter_base",
         "$BUILD_DIR/mongo/db/sorter/sorter_stats",
