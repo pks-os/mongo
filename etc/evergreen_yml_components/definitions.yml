@@ -1608,7 +1608,6 @@ functions:
     - command: subprocess.exec
       display_name: "sync repo with copybara"
       type: test
-      patchable: false
       params:
         binary: bash
         args:
@@ -1834,6 +1833,18 @@ functions:
         timeout_seconds: 3000
         num_hosts: 1
         path: src/hosts.yml
+
+    - command: s3.put
+      params:
+        aws_key: ${aws_key}
+        aws_secret: ${aws_secret}
+        local_file: src/hosts.yml
+        remote_file: ${project}/${build_variant}/${revision}/powercycle-hosts-${task_id}-${execution}.yml
+        bucket: mciuploads
+        permissions: public-read
+        content_type: text/plain
+        display_name: Powercycle hosts - Execution ${execution}
+        optional: true
 
     - *f_expansions_write
     - command: subprocess.exec
