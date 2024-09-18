@@ -142,6 +142,9 @@ MONGO_FAIL_POINT_DEFINE(failAndHangInitialSync);
 // Failpoint which fails initial sync before it applies the next batch of oplog entries.
 MONGO_FAIL_POINT_DEFINE(failInitialSyncBeforeApplyingBatch);
 
+// Failpoint which fasserts if applying a batch fails.
+MONGO_FAIL_POINT_DEFINE(initialSyncFassertIfApplyingBatchFails);
+
 // Failpoint which causes the initial sync function to hang before stopping the oplog fetcher.
 MONGO_FAIL_POINT_DEFINE(initialSyncHangBeforeCompletingOplogFetching);
 
@@ -1619,6 +1622,13 @@ void InitialSyncer::_multiApplierCallback(const Status& multiApplierStatus,
     stdx::lock_guard<Latch> lock(_mutex);
     auto status =
         _checkForShutdownAndConvertStatus_inlock(multiApplierStatus, "error applying batch");
+
+    // Set to cause initial sync to fassert instead of restart if applying a batch fails, so that
+    // tests can be robust to network errors but not oplog idempotency errors.
+    if (MONGO_unlikely(initialSyncFassertIfApplyingBatchFails.shouldFail())) {
+        LOGV2(21189, "initialSyncFassertIfApplyingBatchFails fail point enabled");
+        fassert(31210, status);
+    }
 
     if (!status.isOK()) {
         LOGV2_ERROR(21199, "Failed to apply batch", "error"_attr = redact(status));
