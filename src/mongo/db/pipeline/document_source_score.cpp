@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2022-present MongoDB, Inc.
+ *    Copyright (C) 2024-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -27,17 +27,33 @@
  *    it in the license file.
  */
 
-#include "mongo/db/query/ce_mode_parameter.h"
+#include <boost/smart_ptr/intrusive_ptr.hpp>
 
-#include <boost/optional/optional.hpp>
+#include "mongo/bson/bsontypes.h"
+#include "mongo/db/pipeline/document_source_score.h"
+#include "mongo/db/pipeline/document_source_score_gen.h"
+#include "mongo/db/pipeline/expression_context.h"
+#include "mongo/db/pipeline/lite_parsed_document_source.h"
+#include "mongo/db/query/allowed_contexts.h"
 
-#include "mongo/base/error_codes.h"
+namespace mongo {
 
-namespace mongo::optimizer::ce {
-Status validateCEMode(const std::string& value, const boost::optional<TenantId>&) {
-    if (value == kHeuristic || value == kHistogram || value == kSampling) {
-        return Status::OK();
-    }
-    return Status(ErrorCodes::Error{6695700}, "Invalid cardinality estimation mode.");
+REGISTER_DOCUMENT_SOURCE_WITH_FEATURE_FLAG(score,
+                                           LiteParsedDocumentSourceDefault::parse,
+                                           DocumentSourceScore::createFromBson,
+                                           AllowedWithApiStrict::kNeverInVersion1,
+                                           feature_flags::gFeatureFlagSearchHybridScoring);
+
+std::list<boost::intrusive_ptr<DocumentSource>> DocumentSourceScore::createFromBson(
+    BSONElement elem, const boost::intrusive_ptr<ExpressionContext>& pExpCtx) {
+    uassert(ErrorCodes::FailedToParse,
+            str::stream() << "The " << kStageName
+                          << " stage specification must be an object, found "
+                          << typeName(elem.type()),
+            elem.type() == BSONType::Object);
+    auto spec = ScoreSpec::parse(IDLParserContext(kStageName), elem.embeddedObject());
+
+    // TODO (SERVER-94841): Implement 'score' for $score (will return something then)
+    return {};
 }
-}  // namespace mongo::optimizer::ce
+}  // namespace mongo

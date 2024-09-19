@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2022-present MongoDB, Inc.
+ *    Copyright (C) 2024-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -27,25 +27,44 @@
  *    it in the license file.
  */
 
-#include "mongo/db/query/ce_mode_parameter.h"
+#pragma once
 
-#include <boost/none.hpp>
+#include <list>
 
-#include "mongo/base/string_data.h"
-#include "mongo/unittest/assert.h"
-#include "mongo/unittest/framework.h"
+#include <boost/smart_ptr/intrusive_ptr.hpp>
 
-namespace mongo::optimizer::ce {
+#include "mongo/bson/bsonelement.h"
+#include "mongo/db/pipeline/document_source.h"
+#include "mongo/db/pipeline/expression_context.h"
 
-TEST(CEModeParameterTest, ValidatesValidCEModes) {
-    ASSERT_OK(validateCEMode("heuristic", boost::none));
-    ASSERT_OK(validateCEMode("histogram", boost::none));
-    ASSERT_OK(validateCEMode("sampling", boost::none));
-}
+namespace mongo {
 
-TEST(CEModeParameterTest, RejectsInvalidCEModes) {
-    ASSERT_NOT_OK(validateCEMode("notamode", boost::none));
-    ASSERT_NOT_OK(validateCEMode("", boost::none));
-}
+/**
+ * A projection-like stage, $score will output documents which are the same as the input
+ * documents, now with extra metadata.
+ *
+ * This stage's goal is twofold:
+ * - Help satisfy the constraint of $scoreFusion to participate in hybrid search. A valid input
+ *   to $scoreFusion (known as a scored selection pipeline) is forbidden from modifying the
+ *   actual documents, so this stage aims to allow computing a new thing as metadata without
+ *   being considered a modification.
+ * - Provide a way to normalize input scores to the same domain (usually between 0 and 1).
+ */
+class DocumentSourceScore final {
+public:
+    static constexpr StringData kStageName = "$score"_sd;
 
-}  // namespace mongo::optimizer::ce
+    /**
+     * Allows computation of score metadata for non-search pipelines, and also allows weighting or
+     * normalizing scores.
+     */
+    static std::list<boost::intrusive_ptr<DocumentSource>> createFromBson(
+        BSONElement elem, const boost::intrusive_ptr<ExpressionContext>& pExpCtx);
+
+private:
+    // It is illegal to construct a DocumentSourceScore directly, use createFromBson()
+    // instead.
+    DocumentSourceScore() = delete;
+};
+
+}  // namespace mongo
