@@ -29,21 +29,8 @@
 
 #pragma once
 
-#include <deque>
-#include <memory>
-#include <utility>
-#include <vector>
-
-#include "mongo/base/error_codes.h"
-#include "mongo/bson/bsontypes.h"
-#include "mongo/db/exec/document_value/value.h"
-#include "mongo/db/exec/document_value/value_comparator.h"
-#include "mongo/db/pipeline/expression_context.h"
 #include "mongo/db/pipeline/memory_token_container_util.h"
 #include "mongo/db/pipeline/window_function/window_function.h"
-#include "mongo/util/assert_util.h"
-#include "mongo/util/str.h"
-
 
 namespace mongo {
 
@@ -67,7 +54,8 @@ public:
 
         uassert(ErrorCodes::TypeMismatch,
                 str::stream() << "$concatArrays requires array inputs, but input "
-                              << value.toString() << " is of type " << typeName(value.getType()),
+                              << redact(value.toString()) << " is of type "
+                              << typeName(value.getType()),
                 value.isArray());
 
         _count += value.getArrayLength();

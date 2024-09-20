@@ -61,6 +61,7 @@
 #include "mongo/db/concurrency/lock_manager_defs.h"
 #include "mongo/db/prepare_conflict_tracker.h"
 #include "mongo/db/profile_filter.h"
+#include "mongo/db/profile_settings.h"
 #include "mongo/db/query/plan_summary_stats.h"
 #include "mongo/db/repl/read_concern_args.h"
 #include "mongo/db/server_feature_flags_gen.h"
@@ -570,6 +571,21 @@ void CurOp::enter_inlock(NamespaceString nss, int dbProfileLevel) {
 
 void CurOp::enter_inlock(const DatabaseName& dbName, int dbProfileLevel) {
     enter_inlock(NamespaceString(dbName), dbProfileLevel);
+}
+
+bool CurOp::shouldDBProfile() {
+    // Profile level 2 should override any sample rate or slowms settings.
+    if (_dbprofile >= 2)
+        return true;
+
+    if (_dbprofile <= 0)
+        return false;
+
+    auto& dbProfileSettings = DatabaseProfileSettings::get(opCtx()->getServiceContext());
+    if (dbProfileSettings.getDatabaseProfileSettings(getNSS().dbName()).filter)
+        return true;
+
+    return elapsedTimeExcludingPauses() >= Milliseconds{serverGlobalParams.slowMS.load()};
 }
 
 void CurOp::raiseDbProfileLevel(int dbProfileLevel) {
@@ -1218,8 +1234,8 @@ void OpDebug::report(OperationContext* opCtx,
     pAttrs->add("numYields", curop.numYields());
     OPDEBUG_TOATTR_HELP_OPTIONAL("nreturned", additiveMetrics.nreturned);
 
-    if (queryHash) {
-        pAttrs->addDeepCopy("queryHash", zeroPaddedHex(*queryHash));
+    if (planCacheShapeHash) {
+        pAttrs->addDeepCopy("planCacheShapeHash", zeroPaddedHex(*planCacheShapeHash));
     }
     if (planCacheKey) {
         pAttrs->addDeepCopy("planCacheKey", zeroPaddedHex(*planCacheKey));
@@ -1454,8 +1470,8 @@ void OpDebug::append(OperationContext* opCtx,
     b.appendNumber("numYield", curop.numYields());
     OPDEBUG_APPEND_OPTIONAL(b, "nreturned", additiveMetrics.nreturned);
 
-    if (queryHash) {
-        b.append("queryHash", zeroPaddedHex(*queryHash));
+    if (planCacheShapeHash) {
+        b.append("planCacheShapeHash", zeroPaddedHex(*planCacheShapeHash));
     }
     if (planCacheKey) {
         b.append("planCacheKey", zeroPaddedHex(*planCacheKey));
@@ -1759,9 +1775,9 @@ std::function<BSONObj(ProfileFilter::Args)> OpDebug::appendStaged(StringSet requ
         OPDEBUG_APPEND_OPTIONAL(b, field, args.op.additiveMetrics.nreturned);
     });
 
-    addIfNeeded("queryHash", [](auto field, auto args, auto& b) {
-        if (args.op.queryHash) {
-            b.append(field, zeroPaddedHex(*args.op.queryHash));
+    addIfNeeded("planCacheShapeHash", [](auto field, auto args, auto& b) {
+        if (args.op.planCacheShapeHash) {
+            b.append(field, zeroPaddedHex(*args.op.planCacheShapeHash));
         }
     });
     addIfNeeded("planCacheKey", [](auto field, auto args, auto& b) {

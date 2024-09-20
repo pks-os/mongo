@@ -51,7 +51,6 @@
 #include "mongo/bson/bsonobjbuilder.h"
 #include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/auth/user_acquisition_stats.h"
-#include "mongo/db/catalog/collection_catalog.h"
 #include "mongo/db/client.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/concurrency/flow_control_ticketholder.h"
@@ -386,7 +385,7 @@ public:
     // indexes are present.
     boost::optional<uint32_t> planCacheKey;
     // The hash of the query's "stable" key. This represents the query's shape.
-    boost::optional<uint32_t> queryHash;
+    boost::optional<uint32_t> planCacheShapeHash;
 
     /* The QueryStatsInfo struct was created to bundle all the queryStats related fields of CurOp &
      * OpDebug together (SERVER-83280).
@@ -503,9 +502,6 @@ public:
     // Stores the duration of time spent waiting for the specified user write concern to
     // be fulfilled.
     Milliseconds waitForWriteConcernDurationMillis{0};
-
-    // Stores the duration of time spent waiting in a queue for a ticket to be acquired.
-    Milliseconds waitForTicketDurationMillis{0};
 
     // Stores the duration of execution after removing time spent blocked.
     Milliseconds workingTimeMillis{0};
@@ -723,19 +719,7 @@ public:
      *
      * When a custom filter is set, we conservatively assume it would match this operation.
      */
-    bool shouldDBProfile() {
-        // Profile level 2 should override any sample rate or slowms settings.
-        if (_dbprofile >= 2)
-            return true;
-
-        if (_dbprofile <= 0)
-            return false;
-
-        if (CollectionCatalog::get(opCtx())->getDatabaseProfileSettings(getNSS().dbName()).filter)
-            return true;
-
-        return elapsedTimeExcludingPauses() >= Milliseconds{serverGlobalParams.slowMS.load()};
-    }
+    bool shouldDBProfile();
 
     /**
      * Raises the profiling level for this operation to "dbProfileLevel" if it was previously

@@ -156,6 +156,10 @@ public:
         return kStageName.rawData();
     }
 
+    DocumentSourceType getType() const override {
+        return DocumentSourceType::kMerge;
+    }
+
     MergeProcessor* getMergeProcessor() {
         return _mergeProcessor.get_ptr();
     }
@@ -177,7 +181,8 @@ public:
         boost::optional<BSONObj> letVariables,
         boost::optional<std::vector<BSONObj>> pipeline,
         std::set<FieldPath> mergeOnFields,
-        boost::optional<ChunkVersion> collectionPlacementVersion);
+        boost::optional<ChunkVersion> collectionPlacementVersion,
+        bool allowMergeOnNullishValues);
 
     /**
      * Parses a $merge stage from the user-supplied BSON.
@@ -228,7 +233,8 @@ private:
                         boost::optional<BSONObj> letVariables,
                         boost::optional<std::vector<BSONObj>> pipeline,
                         std::set<FieldPath> mergeOnFields,
-                        boost::optional<ChunkVersion> collectionPlacementVersion);
+                        boost::optional<ChunkVersion> collectionPlacementVersion,
+                        bool allowMergeOnNullishValues);
 
     void flush(BatchedCommandRequest bcr, BatchedObjects batch) override;
 

@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2020-present MongoDB, Inc.
+ *    Copyright (C) 2019-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -27,28 +27,19 @@
  *    it in the license file.
  */
 
-#include "mongo/db/profile_filter.h"
-#include "mongo/platform/mutex.h"
-
-#include <mutex>
-#include <shared_mutex>
-#include <utility>
+#include "mongo/db/exec/sbe/vm/vm.h"
 
 namespace mongo {
+namespace sbe {
+namespace vm {
+FastTuple<bool, value::TypeTags, value::Value> ByteCode::builtinCoerceToBool(ArityType arity) {
+    auto [operandOwned, operandTag, operandVal] = getFromStack(0);
 
-// std::atomic<std::shared_ptr> is not supported until GCC 12 and not in clang libc++ as of
-// 9/28/2023
-static std::shared_ptr<ProfileFilter> defaultProfileFilter;
-static std::shared_mutex mutex;  // NOLINT
+    auto [tag, val] = value::coerceToBool(operandTag, operandVal);
 
-std::shared_ptr<ProfileFilter> ProfileFilter::getDefault() {
-    std::shared_lock lock(mutex);  // NOLINT
-    return defaultProfileFilter;
+    return {false, tag, val};
 }
 
-void ProfileFilter::setDefault(std::shared_ptr<ProfileFilter> filter) {
-    stdx::unique_lock lock(mutex);  // NOLINT
-    defaultProfileFilter = std::move(filter);
-}
-
-};  // namespace mongo
+}  // namespace vm
+}  // namespace sbe
+}  // namespace mongo
