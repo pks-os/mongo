@@ -514,7 +514,8 @@ public:
                                       const NamespaceString& nss,
                                       boost::optional<int32_t> chunkSizeMB,
                                       boost::optional<bool> defragmentCollection,
-                                      boost::optional<bool> enableAutoMerger);
+                                      boost::optional<bool> enableAutoMerger,
+                                      boost::optional<bool> noBalance);
 
     /**
      * Updates the bucketing parameters of a time-series collection. Also bumps the placement
@@ -976,7 +977,7 @@ private:
     // (S) Self-synchronizing; access in any way from any context.
     //
 
-    Mutex _mutex = MONGO_MAKE_LATCH("ShardingCatalogManager::_mutex");
+    stdx::mutex _mutex;
 
     // True if startup() has been called.
     bool _started{false};  // (M)

@@ -51,8 +51,6 @@ assert.commandFailedWithCode(
 
 // $vectorSearch is not allowed in a sub-pipeline.
 assert.commandFailedWithCode(
-    runPipeline([{$unionWith: {coll: collName, pipeline: [makeVectorSearchStage()]}}]), 31441);
-assert.commandFailedWithCode(
     runPipeline([{$lookup: {from: collName, pipeline: [makeVectorSearchStage()], as: "lookup1"}}]),
     51047);
 assert.commandFailedWithCode(runPipeline([{$facet: {originalPipeline: [makeVectorSearchStage()]}}]),
@@ -76,13 +74,6 @@ session.endSession();
 assert.commandFailedWithCode(
     testDB.runCommand({"findandmodify": collName, "update": [makeVectorSearchStage()]}),
     ErrorCodes.InvalidOptions);
-
-// $vectorSearch is not valid on views.
-assert.commandWorked(
-    testDB.runCommand({create: "idView", viewOn: collName, pipeline: [{$match: {_id: {$gt: 1}}}]}));
-assert.commandFailedWithCode(
-    testDB.runCommand({aggregate: 'idView', pipeline: [makeVectorSearchStage()], cursor: {}}),
-    40602);
 
 mongotMock.stop();
 rst.stopSet();

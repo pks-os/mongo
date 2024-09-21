@@ -54,6 +54,16 @@ enums:
             # Attempt to use SBE for eligible queries, otherwise fallback to the classic engine.
             kTrySbeEngine: "trySbeEngine"
 
+    QueryPlanRankerMode:
+        description: "Enum for possible values for planRankerMode."
+        type: string
+        values:
+            kAutomaticCE: "automaticCE"
+            kHistogramCE: "histogramCE"
+            kSamplingCE: "samplingCE"
+            kHeuristicCE: "heuristicCE"
+            kMultiPlanning: "multiPlanning"
+
 structs:
   InternalQueryCutoffForSampleFromRandomCursorStorage:
     description: "A specification for the 'internalQueryCutoffForSampleFromRandomCursor' cluster-wide configuration parameter type."
@@ -483,7 +493,7 @@ server_parameters:
     validator:
       gte: 0
     redact: false
-  
+
   internalQueryExpressionInterruptPeriodMS:
     description: "In some potentially long running expressions check if the query has been killed every time this period has elapsed."
     set_at: [ startup, runtime ]
@@ -900,6 +910,16 @@ server_parameters:
     required on 4.4 to access SEARCH_META variables. Does not do anything."
     set_at: [ startup, runtime ]
     cpp_varname: "enableSearchMeta"
+    cpp_vartype: AtomicWord<bool>
+    default: true
+    redact: false
+
+  enableUnionWithVectorSearch:
+    description: "Enables $vectorSearch inside a $unionWith and changes where the
+    internalSearchIdLookup is added: it's moved from createFromBSON to a new desugar function,
+    which is called in prepareSearchPipelineLegacyExecutor."
+    set_at: [startup, runtime ]
+    cpp_varname: "enableUnionWithVectorSearch"
     cpp_vartype: AtomicWord<bool>
     default: true
     redact: false
@@ -1403,14 +1423,14 @@ server_parameters:
     redact: false
 
   planRankerMode:
-    description: "Enable cost-based ranking of query plans."
+    description: "Control ranking method of query plans."
     set_at: [ startup, runtime ]
-    cpp_varname: planRankerMode
-    # TODO SERVER-92587: change to an enum
-    cpp_vartype: AtomicWord<bool>
-    default: false
+    cpp_class:
+      name: QueryPlanRankerMode
+      data: synchronized_value<QueryPlanRankerModeEnum>
+    default:
+      expr: QueryPlanRankerModeEnum::kMultiPlanning
     redact: false
-    on_update: plan_cache_util::clearSbeCacheOnParameterChange
 
 # Note for adding additional query knobs:
 #

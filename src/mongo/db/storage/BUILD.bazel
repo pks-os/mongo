@@ -66,6 +66,7 @@ mongo_cc_library(
         "named_pipe.h",
         "record_store.h",
         "//src/mongo/db/exec:batched_delete_stage_gen",
+        "//src/mongo/db/storage:damage_vector.h",
     ],
     deps = [
         ":storage_options",  # TODO(SERVER-93876): Remove.
@@ -181,6 +182,36 @@ mongo_cc_library(
 idl_generator(
     name = "flow_control_parameters_gen",
     src = "flow_control_parameters.idl",
+)
+
+mongo_cc_library(
+    name = "flow_control_parameters",
+    srcs = [
+        ":flow_control_parameters_gen",
+    ],
+    deps = [
+        "//src/mongo/db:server_base",
+    ],
+)
+
+mongo_cc_library(
+    name = "flow_control",
+    srcs = [
+        "flow_control.cpp",
+    ],
+    hdrs = [
+        "flow_control.h",
+    ],
+    deps = [
+        ":flow_control_parameters",
+        "//src/mongo/db:server_base",
+        "//src/mongo/db:service_context",  # TODO(SERVER-93876): Remove.
+        "//src/mongo/db:shard_role_api",
+        "//src/mongo/db/commands:server_status_core",
+        "//src/mongo/db/concurrency:flow_control_ticketholder",
+        "//src/mongo/util:background_job",
+        "//src/mongo/util:fail_point",
+    ],
 )
 
 idl_generator(
@@ -528,7 +559,6 @@ mongo_cc_library(
         "write_unit_of_work.cpp",
     ],
     header_deps = [
-        "//src/mongo/bson/mutable:mutable_bson",
         "//src/mongo/db/commands:server_status_core",
         "//src/mongo/db/op_observer:op_observer",
     ],

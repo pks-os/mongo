@@ -190,6 +190,37 @@ idl_generator(
     ],
 )
 
+mongo_cc_library(
+    name = "authentication_commands",
+    srcs = [
+        "authentication_commands.cpp",
+        "authentication_commands_gen",
+    ],
+    hdrs = [
+        "authentication_commands.h",
+    ],
+    deps = [
+        # TODO SERVER-72648 - remove dependencies
+        "//src/mongo/bson/mutable:mutable_bson",
+        "//src/mongo/db/auth",
+        "//src/mongo/db/auth:auth_options",
+        "//src/mongo/db/auth:authentication_session",
+        "//src/mongo/db/auth:authorization_manager_global",
+        "//src/mongo/db/auth:cluster_auth_mode",
+        "//src/mongo/db/auth:sasl_commands",
+        "//src/mongo/db:commands",
+        "//src/mongo/db:server_base",
+        "//src/mongo/rpc:client_metadata",
+        "//src/mongo/util/net:ssl_manager",
+        ":test_commands_enabled",
+    ] + select({
+        "//bazel/config:ssl_enabled": [
+            "//src/mongo/db/auth:user_request_x509",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
 idl_generator(
     name = "feature_compatibility_version_gen",
     src = "feature_compatibility_version.idl",
@@ -584,7 +615,6 @@ mongo_cc_library(
         "//src/mongo/db/query:find_command_gen",
         "//src/mongo/db/query:index_entry.h",
         "//src/mongo/db/query:interval_evaluation_tree.h",
-        "//src/mongo/db/query:opt_counter_info.h",
         "//src/mongo/db/query:parsed_find_command.h",
         "//src/mongo/db/query:plan_executor.h",
         "//src/mongo/db/query:plan_explainer.h",
