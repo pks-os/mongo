@@ -50,9 +50,9 @@
 #include "mongo/client/remote_command_retry_scheduler.h"
 #include "mongo/db/catalog/collection_uuid_mismatch_info.h"
 #include "mongo/db/client.h"
-#include "mongo/db/cursor_id.h"
-#include "mongo/db/query/cursor_response.h"
-#include "mongo/db/query/kill_cursors_gen.h"
+#include "mongo/db/query/client_cursor/cursor_id.h"
+#include "mongo/db/query/client_cursor/cursor_response.h"
+#include "mongo/db/query/client_cursor/kill_cursors_gen.h"
 #include "mongo/db/query/query_knobs_gen.h"
 #include "mongo/executor/async_multicaster.h"
 #include "mongo/executor/remote_command_request.h"
@@ -426,15 +426,13 @@ void CursorEstablisher::killOpOnShards(ServiceContext* srvCtx,
             opKey.appendToArrayBuilder(&opKeyArrayBuilder);
         }
 
-        executor::RemoteCommandRequest::Options options;
-        options.fireAndForget = true;
         executor::RemoteCommandRequest request(
             host,
             DatabaseName::kAdmin,
             BSON("_killOperations" << 1 << "operationKeys" << opKeyArrayBuilder.arr()),
             opCtx.get(),
             executor::RemoteCommandRequestBase::kNoTimeout,
-            options);
+            true /* fireAndForget */);
 
         // We do not process the response to the killOperations request (we make a good-faith
         // attempt at cleaning up the cursors, but ignore any returned errors).

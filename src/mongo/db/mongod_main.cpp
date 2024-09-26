@@ -69,6 +69,7 @@
 #include "mongo/db/audit.h"
 #include "mongo/db/audit_interface.h"
 #include "mongo/db/auth/auth_op_observer.h"
+#include "mongo/db/auth/authorization_backend_interface.h"
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/auth/user_cache_invalidator_job.h"
 #include "mongo/db/catalog/collection.h"
@@ -88,7 +89,6 @@
 #include "mongo/db/change_stream_serverless_helpers.h"
 #include "mongo/db/change_streams_cluster_parameter_gen.h"
 #include "mongo/db/client.h"
-#include "mongo/db/clientcursor.h"
 #include "mongo/db/cluster_role.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/commands/feature_compatibility_version.h"
@@ -138,6 +138,7 @@
 #include "mongo/db/pipeline/change_stream_preimage_gen.h"
 #include "mongo/db/pipeline/process_interface/replica_set_node_process_interface.h"
 #include "mongo/db/profile_filter_impl.h"
+#include "mongo/db/query/client_cursor/clientcursor.h"
 #include "mongo/db/query/query_knobs_gen.h"
 #include "mongo/db/query/query_settings/query_settings_manager.h"
 #include "mongo/db/query/stats/stats_cache_loader_impl.h"
@@ -779,11 +780,15 @@ ExitCode _initAndListen(ServiceContext* serviceContext) {
 
     auto const authzManagerShard =
         AuthorizationManager::get(serviceContext->getService(ClusterRole::ShardServer));
+
+    auto authzBackend = auth::AuthorizationBackendInterface::get(
+        serviceContext->getService(ClusterRole::ShardServer));
     {
         TimeElapsedBuilderScopedTimer scopedTimer(serviceContext->getFastClockSource(),
                                                   "Build user and roles graph",
                                                   &startupTimeElapsedBuilder);
         uassertStatusOK(authzManagerShard->initialize(startupOpCtx.get()));
+        uassertStatusOK(authzBackend->initialize(startupOpCtx.get()));
     }
 
     if (audit::initializeManager) {
@@ -2056,7 +2061,7 @@ void shutdownTask(const ShutdownTaskArgs& shutdownArgs) {
             serviceContext->getFastClockSource(),
             "Wait for the oplog cap maintainer thread to stop",
             &shutdownTimeElapsedBuilder);
-        OplogCapMaintainerThread::get(serviceContext)->waitForFinish();
+        OplogCapMaintainerThread::get(serviceContext)->shutdown();
     }
 
     // We should always be able to acquire the global lock at shutdown.

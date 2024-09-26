@@ -76,9 +76,9 @@
 #include "mongo/db/pipeline/semantic_analysis.h"
 #include "mongo/db/pipeline/stage_constraints.h"
 #include "mongo/db/pipeline/variables.h"
+#include "mongo/db/query/client_cursor/cursor_response.h"
+#include "mongo/db/query/client_cursor/cursor_response_gen.h"
 #include "mongo/db/query/collation/collation_spec.h"
-#include "mongo/db/query/cursor_response.h"
-#include "mongo/db/query/cursor_response_gen.h"
 #include "mongo/db/query/query_request_helper.h"
 #include "mongo/db/query/query_stats/query_stats.h"
 #include "mongo/db/repl/read_concern_args.h"
@@ -403,14 +403,23 @@ bool anyStageModifiesShardKeyOrNeedsMerge(OrderedPathSet shardKeyPaths,
     return false;
 }
 
-boost::optional<ShardedExchangePolicy> walkPipelineBackwardsTrackingShardKey(
-    OperationContext* opCtx, const Pipeline* mergePipeline, const ChunkManager& chunkManager) {
-
-    const ShardKeyPattern& shardKey = chunkManager.getShardKeyPattern();
+/**
+ * Returns an ordered set of shard key paths from the given shard key pattern.
+ */
+OrderedPathSet getShardKeyPathsSet(const ShardKeyPattern& shardKey) {
     OrderedPathSet shardKeyPaths;
     for (auto&& path : shardKey.getKeyPatternFields()) {
         shardKeyPaths.emplace(path->dottedField().toString());
     }
+
+    return shardKeyPaths;
+}
+
+boost::optional<ShardedExchangePolicy> walkPipelineBackwardsTrackingShardKey(
+    OperationContext* opCtx, const Pipeline* mergePipeline, const ChunkManager& chunkManager) {
+
+    const ShardKeyPattern& shardKey = chunkManager.getShardKeyPattern();
+    OrderedPathSet shardKeyPaths = getShardKeyPathsSet(shardKey);
     if (anyStageModifiesShardKeyOrNeedsMerge(shardKeyPaths, mergePipeline)) {
         return boost::none;
     }
@@ -1033,7 +1042,12 @@ DispatchShardPipelineResults dispatchTargetedShardPipeline(
                     "needsMongosMerge"_attr = pipeline->needsMongosMerger(),
                     "needsSpecificShardMerger"_attr =
                         mergeShardId.has_value() ? mergeShardId->toString() : "false");
-        splitPipelines = SplitPipeline::split(std::move(pipeline));
+
+        boost::optional<OrderedPathSet> shardKeyPaths;
+        if (cri && cri->cm.isSharded()) {
+            shardKeyPaths = getShardKeyPathsSet(cri->cm.getShardKeyPattern());
+        }
+        splitPipelines = SplitPipeline::split(std::move(pipeline), std::move(shardKeyPaths));
 
         // If the first stage of the pipeline is a $search stage, exchange optimization isn't
         // possible.
@@ -1222,7 +1236,7 @@ AsyncResultsMergerParams buildArmParams(boost::intrusive_ptr<ExpressionContext> 
     return armParams;
 }
 
-// Anonnymous namespace for helpers of partitionCursorsAndAddMergeCursors.
+// Anonymous namespace for helpers of partitionCursorsAndAddMergeCursors.
 namespace {
 /**
  * Given the owned cursors vector, partitions the cursors into either one or two vectors. If

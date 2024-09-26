@@ -37,7 +37,7 @@
 #include "mongo/bson/bsonobjbuilder.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/namespace_string.h"
-#include "mongo/db/query/cursor_response.h"
+#include "mongo/db/query/client_cursor/cursor_response.h"
 #include "mongo/executor/network_test_env.h"
 
 namespace mongo {
@@ -61,7 +61,7 @@ void NetworkTestEnv::onCommands(std::vector<OnCommandFunction> funcs) {
 
         auto resultStatus = func(request);
 
-        if (request.options.fireAndForget) {
+        if (request.fireAndForget) {
             _mockNetwork->blackHole(noi);
         } else if (resultStatus.isOK()) {
             BSONObjBuilder result(std::move(resultStatus.getValue()));
@@ -86,7 +86,7 @@ void NetworkTestEnv::onCommandWithMetadata(OnCommandWithMetadataFunction func) {
 
     auto cmdResponseStatus = func(request);
 
-    if (request.options.fireAndForget) {
+    if (request.fireAndForget) {
         _mockNetwork->blackHole(noi);
     } else if (cmdResponseStatus.isOK()) {
         BSONObjBuilder result(std::move(cmdResponseStatus.data));

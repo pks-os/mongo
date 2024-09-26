@@ -5,6 +5,7 @@
 import {
     getAggPlanStage,
 } from "jstests/libs/analyze_plan.js";
+import {validateMongotStageExplainExecutionStats} from "jstests/with_mongot/common_utils.js";
 import {
     mongotMultiCursorResponseForBatch,
     mongotResponseForBatch
@@ -352,23 +353,23 @@ export function setUpMongotReturnExplainAndMultiCursorGetMore({
 }
 
 /**
- * Helper function to obtain the search stage (ex. $searchMeta, $_internalSearchMongotRemote) and to
+ * Helper function to obtain the mongot stage (ex. $searchMeta, $_internalSearchMongotRemote) and to
  * check its explain result. Will only check $_internalSearchIdLookup if 'nReturnedIdLookup is
- * provided. Function will fail for non-search stages.
+ * provided. Function will fail for non-mongot stages.
  * @param {Object} result the results from running coll.explain().aggregate([[$search: ....], ...])
  * @param {string} stageType ex. "$_internalSearchMongotRemote" , "$searchMeta",
  *     "$_internalSearchIdLookup "
  * @param {string} verbosity The verbosity of explain. "nReturned" and "executionTimeMillisEstimate"
  *     will not be checked for 'queryPlanner' verbosity "
  * @param {NumberLong} nReturned The number of documents that should be returned in the
- *     searchStage.
+ *     mongot stage.
  * @param {Object} explainContents The explain object that the stage should contain.
  */
-export function getSearchStagesAndVerifyExplainOutput(
+export function getMongotStagesAndValidateExplainExecutionStats(
     {result, stageType, verbosity, nReturned, explainObject = null}) {
     const searchStage = getAggPlanStage(result, stageType);
     assert.neq(searchStage, null, result);
-    verifySearchStageExplainOutput({
+    validateMongotStageExplainExecutionStats({
         stage: searchStage,
         stageType: stageType,
         nReturned: nReturned,
@@ -380,7 +381,7 @@ export function getSearchStagesAndVerifyExplainOutput(
 /**
  * Helper function for sharded clusters to obtain the stage specified. Will check nReturned for non
  * "queryPlanner" verbosity, and explainContents if specified. This function will fail for
- * non-search stages.
+ * non-mongot stages.
  *
  * @param {Object} result the results from running coll.explain().aggregate([[$search: ....], ...])
  * @param {string} stageType ex. "$_internalSearchMongotRemote" , "$searchMeta",
@@ -394,7 +395,7 @@ export function getSearchStagesAndVerifyExplainOutput(
  * @param {Object} expectedExplainContents Optional - The explain object that the stage should
  *     contain.
  */
-export function getShardedSearchStagesAndVerifyExplainOutput(
+export function getShardedMongotStagesAndValidateExplainExecutionStats(
     {result, stageType, expectedNumStages, verbosity, nReturnedList, expectedExplainContents}) {
     assert.eq(nReturnedList.length, expectedNumStages);
     assert(result.hasOwnProperty("shards"),
@@ -421,7 +422,7 @@ export function getShardedSearchStagesAndVerifyExplainOutput(
                "Unable to find stageType: " + stageType + " for shard " + index +
                    " in result: " + tojson(result));
 
-        verifySearchStageExplainOutput({
+        validateMongotStageExplainExecutionStats({
             stage: stage,
             stageType: stageType,
             nReturned: nReturnedList[index],
@@ -435,43 +436,4 @@ export function getShardedSearchStagesAndVerifyExplainOutput(
               expectedNumStages,
               "Number of shards checked: " + counter + " did not match the expectedNumber: " +
                   expectedNumStages + " in the result: " + tojson(result));
-}
-
-const searchStages =
-    ["$_internalSearchMongotRemote", "$searchMeta", "$_internalSearchIdLookup", "$vectorSearch"];
-
-/**
- * This function checks that a search stage from an explain output contains the information that
- * it should.
- * @param {Object} stage The object representing a search stage ($_internalSearchMongotRemote,
- *     $searchMeta, $_internalSearchIdLookup) from explain output.
- * @param {string} stageType ex. "$_internalSearchMongotRemote" , "$searchMeta",
- *     "$_internalSearchIdLookup "
- * @param {NumberLong} nReturned The number of documents that should be returned in the
- *     searchStage.
- * @param {Object} explain The explain object that the stage should contain.
- * @param {string} verbosity The verbosity of explain. "nReturned" and "executionTimeMillisEstimate"
- *     will not be checked for 'queryPlanner' verbosity "
- */
-export function verifySearchStageExplainOutput(
-    {stage, stageType, nReturned, explain = null, verbosity}) {
-    assert(searchStages.includes(stageType),
-           "stageType must be a search stage found in searchStages.");
-    assert(stage[stageType],
-           "Given stage isn't the expected stage. " + stageType + " is not found.");
-
-    if (verbosity != "queryPlanner") {
-        assert(stage.hasOwnProperty("nReturned"));
-        assert.eq(nReturned, stage["nReturned"]);
-        assert(stage.hasOwnProperty("executionTimeMillisEstimate"));
-    }
-
-    if (stageType != "$_internalSearchIdLookup") {
-        assert(explain, "Explain is null but needs to be provided for initial search stage.");
-    }
-    if (explain != null) {
-        const explainStage = stage[stageType];
-        assert(explainStage.hasOwnProperty("explain"), explainStage);
-        assert.eq(explain, explainStage["explain"]);
-    }
 }

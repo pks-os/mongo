@@ -129,7 +129,6 @@ mongo_cc_library(
         ":grid",
         ":mongos_server_parameters",
         "//src/mongo/db/query:command_request_response",
-        "//src/mongo/executor:hedge_options_util",
         "//src/mongo/executor:scoped_task_executor",
         "//src/mongo/executor:task_executor_interface",
         "//src/mongo/s/client:shard_interface",
@@ -290,7 +289,7 @@ idl_generator(
     deps = [
         "//src/mongo/db:basic_types_gen",
         "//src/mongo/db:metadata_consistency_types_gen",
-        "//src/mongo/db/query:cursor_response_gen",
+        "//src/mongo/db/query/client_cursor:cursor_response_gen",
         "//src/mongo/idl:generic_argument_gen",
     ],
 )

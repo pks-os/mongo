@@ -72,6 +72,11 @@ generate_config_header(
             "MONGO_CONFIG_OCSP_STAPLING_ENABLED": "1",
         },
         "//conditions:default": {},
+    }) | select({
+        "//bazel/config:use_tracing_profiler_enabled": {
+            "MONGO_CONFIG_USE_TRACING_PROFILER": "1",
+        },
+        "//conditions:default": {},
     }),
     logfile = "mongo_config.log",
     output = "config.h",
@@ -361,7 +366,6 @@ mongo_cc_library(
         "//src/mongo/util:version.h",
         "//src/mongo/util:waitable.h",
         "//src/mongo/util/concurrency:idle_thread_block.h",
-        "//src/mongo/util/concurrency:mutex.h",
         "//src/mongo/util/concurrency:thread_name.h",
         "//src/mongo/util/concurrency:with_lock.h",
     ],

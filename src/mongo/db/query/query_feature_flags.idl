@@ -122,7 +122,7 @@ feature_flags:
     featureFlagSearchBatchSizeTuning:
       description: "Feature flag to enable batchSize tuning for search queries."
       cpp_varname: gFeatureFlagSearchBatchSizeTuning
-      default: false
+      default: true
       shouldBeFCVGated: false
 
     featureFlagSearchHybridScoring:
@@ -177,7 +177,7 @@ feature_flags:
       cpp_varname: gFeatureFlagShardFilteringDistinctScan
       default: false
       shouldBeFCVGated: true
-    
+
     featureFlagArrayAccumulators:
       description: "Feature flag to enable the $concatArrays and $setUnion accumulators."
       cpp_varname: gFeatureFlagArrayAccumulators

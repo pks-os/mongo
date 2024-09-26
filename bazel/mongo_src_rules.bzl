@@ -421,16 +421,16 @@ GCC_OPT_DEFINES = select({
 
 LINUX_OPT_COPTS = select({
     # This is opt=debug, not to be confused with (opt=on && dbg=on)
-    "//bazel/config:linux_opt_debug": [
+    "//bazel/config:gcc_or_clang_opt_debug": [
         "-Og",
     ],
-    "//bazel/config:linux_opt_off": [
+    "//bazel/config:gcc_or_clang_opt_off": [
         "-O0",
     ],
-    "//bazel/config:linux_opt_on": [
+    "//bazel/config:gcc_or_clang_opt_on": [
         "-O2",
     ],
-    "//bazel/config:linux_opt_size": [
+    "//bazel/config:gcc_or_clang_opt_size": [
         "-Os",
     ],
     "//conditions:default": [],
@@ -1049,6 +1049,8 @@ GDWARF_FEATURES = select({
     # -gdwarf64 was supported. If this creates incompatibility issues, we may
     # need to fallback to -gdwarf32 in certain cases.
     "//bazel/config:linux_gcc": ["dwarf64"],
+    # SUSE15 builds system libraries with dwarf32, use dwarf32 to be keep consistent
+    "//bazel/config:suse15_gcc": ["dwarf32"],
     "//conditions:default": [],
 })
 

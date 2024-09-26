@@ -23,11 +23,7 @@ filters:
       - 10gen/server-cluster-scalability
   - "profile_*":
     approvers:
-      - awagenmaker
-      - cswanson310
-      - TedTuckman
-    metadata:
-      owning_team: 10gen/query-integration
+      - 10gen/query-integration-observability
   - "record_id*":
     approvers:
       - 10gen/server-storage-execution
@@ -57,11 +53,7 @@ filters:
   - "fle*":
     approvers:
       - 10gen/server-security
-      - awagenmaker
-      - TedTuckman
-      - banarun
-    metadata:
-      owning_team: 10gen/query-integration
+      - 10gen/query-integration-fle
   - "server_options*":
     approvers:
       - 10gen/server-security
@@ -76,11 +68,7 @@ filters:
       - 10gen/query-execution
   - "curop*":
     approvers:
-      - awagenmaker
-      - cswanson310
-      - TedTuckman
-    metadata:
-      owning_team: 10gen/query-integration
+      - 10gen/query-integration-observability
   - "allocate_cursor_id*":
     approvers:
       - 10gen/query-execution
@@ -98,11 +86,7 @@ filters:
       - 10gen/query-execution
   - "exhaust_cursor_currentop_integration_test.cpp":
     approvers:
-      - TedTuckman
-      - banarun
-      - awagenmaker
-    metadata:
-      owning_team: 10gen/query-integration
+      - 10gen/query-integration-staff-leads
   - "generic_cursor*":
     approvers:
       - 10gen/query-execution

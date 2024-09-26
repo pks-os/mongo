@@ -52,9 +52,9 @@
 #include "mongo/db/namespace_string.h"
 #include "mongo/db/pipeline/expression_context.h"
 #include "mongo/db/pipeline/process_interface/mongo_process_interface.h"
+#include "mongo/db/query/client_cursor/cursor_response.h"
 #include "mongo/db/query/collation/collator_factory_interface.h"
 #include "mongo/db/query/collation/collator_interface.h"
-#include "mongo/db/query/cursor_response.h"
 #include "mongo/db/query/query_planner_common.h"
 #include "mongo/db/read_concern_support_result.h"
 #include "mongo/db/repl/read_concern_args.h"
@@ -603,29 +603,7 @@ scatterGatherVersionedTargetByRoutingTableNoThrowOnStaleShardVersionErrors(
         opCtx, dbName, readPref, retryPolicy, requests);
 }
 
-AsyncRequestsSender::Response executeCommandAgainstDatabasePrimary(
-    OperationContext* opCtx,
-    const DatabaseName& dbName,
-    const CachedDatabaseInfo& dbInfo,
-    const BSONObj& cmdObj,
-    const ReadPreferenceSetting& readPref,
-    Shard::RetryPolicy retryPolicy) {
-    // Attach shardVersion "UNSHARDED", unless targeting a fixed db collection.
-    const auto cmdObjWithShardVersion = !dbInfo->getVersion().isFixed()
-        ? appendShardVersion(cmdObj, ShardVersion::UNSHARDED())
-        : cmdObj;
-
-    auto responses = gatherResponses(
-        opCtx,
-        dbName,
-        readPref,
-        retryPolicy,
-        std::vector<AsyncRequestsSender::Request>{AsyncRequestsSender::Request(
-            dbInfo->getPrimary(), appendDbVersionIfPresent(cmdObjWithShardVersion, dbInfo))});
-    return std::move(responses.front());
-}
-
-AsyncRequestsSender::Response executeDDLCoordinatorCommandAgainstDatabasePrimary(
+AsyncRequestsSender::Response executeCommandAgainstDatabasePrimaryOnlyAttachingDbVersion(
     OperationContext* opCtx,
     const DatabaseName& dbName,
     const CachedDatabaseInfo& dbInfo,
