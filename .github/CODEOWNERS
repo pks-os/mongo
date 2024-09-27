@@ -274,11 +274,28 @@ WORKSPACE.bazel @10gen/devprod-build @svc-auto-approve-bot
 /jstests/multiVersion/**/migration* @10gen/server-cluster-scalability @svc-auto-approve-bot
 /jstests/multiVersion/**/rs_endpoint* @10gen/server-cluster-scalability @svc-auto-approve-bot
 
+# The following patterns are parsed from ./jstests/noPassthrough/OWNERS.yml
+/jstests/noPassthrough/**/*reproducible_initializer* @10gen/server-programmability @svc-auto-approve-bot
+/jstests/noPassthrough/**/version.js @10gen/server-programmability @svc-auto-approve-bot
+/jstests/noPassthrough/**/exit_logging.js @10gen/server-programmability @svc-auto-approve-bot
+/jstests/noPassthrough/**/*tassert* @10gen/server-programmability @svc-auto-approve-bot
+/jstests/noPassthrough/**/*pin_code_segments* @10gen/server-programmability @svc-auto-approve-bot
+/jstests/noPassthrough/**/*utf8_paths* @10gen/server-programmability @svc-auto-approve-bot
+
 # The following patterns are parsed from ./jstests/noPassthrough/admission/OWNERS.yml
 /jstests/noPassthrough/admission/**/* @10gen/server-workload-scheduling @svc-auto-approve-bot
 
+# The following patterns are parsed from ./jstests/noPassthrough/bson/OWNERS.yml
+/jstests/noPassthrough/bson/**/* @10gen/server-programmability @svc-auto-approve-bot
+
 # The following patterns are parsed from ./jstests/noPassthrough/configuration/OWNERS.yml
 /jstests/noPassthrough/configuration/**/configExpand_* @10gen/server-security @svc-auto-approve-bot
+
+# The following patterns are parsed from ./jstests/noPassthrough/interruption/OWNERS.yml
+/jstests/noPassthrough/interruption/**/* @10gen/server-programmability @svc-auto-approve-bot
+
+# The following patterns are parsed from ./jstests/noPassthrough/libs/OWNERS.yml
+/jstests/noPassthrough/libs/**/*server_parameter* @10gen/server-programmability @svc-auto-approve-bot
 
 # The following patterns are parsed from ./jstests/noPassthrough/query/OWNERS.yml
 /jstests/noPassthrough/query/**/* @10gen/query @svc-auto-approve-bot
@@ -342,6 +359,9 @@ WORKSPACE.bazel @10gen/devprod-build @svc-auto-approve-bot
 
 # The following patterns are parsed from ./jstests/noPassthrough/security/OWNERS.yml
 /jstests/noPassthrough/security/**/* @10gen/server-security @svc-auto-approve-bot
+
+# The following patterns are parsed from ./jstests/noPassthrough/server_parameters/OWNERS.yml
+/jstests/noPassthrough/server_parameters/**/* @10gen/server-programmability @svc-auto-approve-bot
 
 # The following patterns are parsed from ./jstests/noPassthrough/timeseries/OWNERS.yml
 /jstests/noPassthrough/timeseries/**/* @10gen/server-storage-execution @svc-auto-approve-bot
@@ -449,8 +469,10 @@ WORKSPACE.bazel @10gen/devprod-build @svc-auto-approve-bot
 /src/mongo/base/**/secure_allocator* @10gen/server-security @svc-auto-approve-bot
 
 # The following patterns are parsed from ./src/mongo/bson/OWNERS.yml
-/src/mongo/bson/**/*column* @10gen/server-storage-execution @svc-auto-approve-bot
 /src/mongo/bson/**/* @10gen/server-programmability @svc-auto-approve-bot
+
+# The following patterns are parsed from ./src/mongo/bson/column/OWNERS.yml
+/src/mongo/bson/column/**/* @10gen/server-storage-execution @svc-auto-approve-bot
 
 # The following patterns are parsed from ./src/mongo/client/OWNERS.yml
 /src/mongo/client/**/* @10gen/server-networking-and-observability @svc-auto-approve-bot
@@ -624,10 +646,6 @@ WORKSPACE.bazel @10gen/devprod-build @svc-auto-approve-bot
 /src/mongo/db/exec/**/trial_period_utils* @10gen/query-optimization @svc-auto-approve-bot
 /src/mongo/db/exec/**/trial_run_tracker.h @10gen/query-optimization @svc-auto-approve-bot
 /src/mongo/db/exec/**/trial_stage* @10gen/query-optimization @svc-auto-approve-bot
-
-# The following patterns are parsed from ./src/mongo/db/exec/sbe/OWNERS.yml
-/src/mongo/db/exec/sbe/**/*columnar* @10gen/query-integration-staff-leads @svc-auto-approve-bot
-/src/mongo/db/exec/sbe/**/*column_store* @10gen/query-integration-staff-leads @svc-auto-approve-bot
 
 # The following patterns are parsed from ./src/mongo/db/ftdc/OWNERS.yml
 /src/mongo/db/ftdc/**/* @10gen/server-networking-and-observability @markbenvenuto @svc-auto-approve-bot

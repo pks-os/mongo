@@ -752,21 +752,20 @@ CommonMongodProcessInterface::fieldsHaveSupportingUniqueIndex(
     const std::set<FieldPath>& fieldPaths) const {
     auto* opCtx = expCtx->opCtx;
 
-    // We purposefully avoid a helper like AutoGetCollection here because we don't want to check the
-    // db version or do anything else. We simply want to protect against concurrent modifications to
-    // the catalog.
-    Lock::DBLock dbLock(opCtx, nss.dbName(), MODE_IS);
-    Lock::CollectionLock collLock(opCtx, nss, MODE_IS);
-    auto databaseHolder = DatabaseHolder::get(opCtx);
-    auto db = databaseHolder->getDb(opCtx, nss.dbName());
-    auto collection =
-        db ? CollectionCatalog::get(opCtx)->lookupCollectionByNamespace(opCtx, nss) : nullptr;
-    if (!collection) {
+    // This method just checks metadata of the collection, which should be consistent across all
+    // shards therefore it's safe to ignore placement concern when locking the collection for read
+    // and acquiring a reference to it.
+    const auto collection = acquireCollectionMaybeLockFree(
+        opCtx,
+        CollectionAcquisitionRequest(nss,
+                                     AcquisitionPrerequisites::kPretendUnsharded,
+                                     repl::ReadConcernArgs::get(opCtx),
+                                     AcquisitionPrerequisites::kRead));
+    if (!collection.exists()) {
         return fieldPaths == std::set<FieldPath>{"_id"} ? SupportingUniqueIndex::Full
                                                         : SupportingUniqueIndex::None;
     }
-
-    auto indexIterator = collection->getIndexCatalog()->getIndexIterator(
+    auto indexIterator = collection.getCollectionPtr()->getIndexCatalog()->getIndexIterator(
         opCtx, IndexCatalog::InclusionPolicy::kReady);
     auto result = SupportingUniqueIndex::None;
     while (indexIterator->more()) {
@@ -894,19 +893,19 @@ CommonMongodProcessInterface::ensureFieldsUniqueOrResolveDocumentKey(
     const NamespaceString& outputNs) const {
     uassert(51123,
             "Unexpected target chunk version specified",
-            !targetCollectionPlacementVersion || expCtx->fromMongos);
+            !targetCollectionPlacementVersion || expCtx->fromRouter);
 
     if (!fieldPaths) {
-        uassert(51124, "Expected fields to be provided from mongos", !expCtx->fromMongos);
+        uassert(51124, "Expected fields to be provided from router", !expCtx->fromRouter);
         return {std::set<FieldPath>{"_id"},
                 targetCollectionPlacementVersion,
                 SupportingUniqueIndex::Full};
     }
 
     // Make sure the 'fields' array has a supporting index. Skip this check if the command is sent
-    // from mongos since the 'fields' check would've happened already.
+    // from router since the 'fields' check would've happened already.
     auto supportingUniqueIndex = fieldsHaveSupportingUniqueIndex(expCtx, outputNs, *fieldPaths);
-    if (!expCtx->fromMongos) {
+    if (!expCtx->fromRouter) {
         uassert(51183,
                 "Cannot find index to verify that join fields will be unique",
                 supportingUniqueIndex != SupportingUniqueIndex::None);

@@ -48,9 +48,9 @@
 #include "mongo/bson/bsonobjbuilder.h"
 #include "mongo/bson/bsontypes.h"
 #include "mongo/bson/bsontypes_util.h"
+#include "mongo/bson/column/bsoncolumn.h"
+#include "mongo/bson/column/bsoncolumnbuilder.h"
 #include "mongo/bson/timestamp.h"
-#include "mongo/bson/util/bsoncolumn.h"
-#include "mongo/bson/util/bsoncolumnbuilder.h"
 #include "mongo/bson/util/builder.h"
 #include "mongo/db/timeseries/timeseries_constants.h"
 #include "mongo/db/timeseries/timeseries_write_util.h"
@@ -185,7 +185,7 @@ CompressionResult _compressBucket(const BSONObj& bucketDoc,
     std::sort(measurements.begin(),
               measurements.end(),
               [](const details::Measurement& lhs, const details::Measurement& rhs) {
-                  return lhs.timeField.timestamp() < rhs.timeField.timestamp();
+                  return lhs.timeField.date() < rhs.timeField.date();
               });
 
     // Write _id unless EOO which it can be in some unittests

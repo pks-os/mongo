@@ -20,13 +20,14 @@ env.Library(
 env.Library(
     target="cbp_ce_test_helpers",
     source=[
-        "test_helpers.cpp",
-        "accuracy_test_helpers.cpp",
+        "test_utils.cpp",
+        "accuracy_test_utils.cpp",
         "histogram_predicate_estimation.cpp",
     ],
     LIBDEPS=[
-        "$BUILD_DIR/mongo/db/query/ce/test_utils",
         "$BUILD_DIR/mongo/db/query/stats/stats_test_utils",
+        "$BUILD_DIR/mongo/db/sbe_values",
+        "$BUILD_DIR/mongo/db/server_base",
         "histogram_helpers",
     ],
 )
@@ -39,10 +40,31 @@ env.CppUnitTest(
         "array_histogram_helpers_test.cpp",
     ],
     LIBDEPS=[
-        "$BUILD_DIR/mongo/db/query/ce/test_utils",
         "$BUILD_DIR/mongo/db/query/stats/stats_test_utils",
         "cbp_ce_test_helpers",
         "histogram_helpers",
+    ],
+)
+
+env.CppUnitTest(
+    target="maxdiff_histogram_cbp_test",
+    source=[
+        "maxdiff_histogram_test.cpp",
+    ],
+    LIBDEPS=[
+        "cbp_ce_test_helpers",
+    ],
+)
+
+env.CppUnitTest(
+    target="generated_histograms_test",
+    source=[
+        "generated_histograms_test.cpp",
+    ],
+    LIBDEPS=[
+        "$BUILD_DIR/mongo/db/query/stats/stats_test_utils",
+        "$BUILD_DIR/mongo/db/service_context_test_fixture",
+        "cbp_ce_test_helpers",
     ],
 )
 
@@ -50,7 +72,6 @@ env.Benchmark(
     target="cbp_histogram_bm",
     source=["array_histogram_bm.cpp"],
     LIBDEPS=[
-        "$BUILD_DIR/mongo/db/query/ce/test_utils",
         "$BUILD_DIR/mongo/db/query/query_test_service_context",
         "$BUILD_DIR/mongo/db/query/stats/stats_test_utils",
         "cbp_ce_test_helpers",
@@ -61,7 +82,6 @@ env.Program(
     target="cbp_histogram_estimation_accuracy_test",
     source=["histogram_accuracy_test.cpp"],
     LIBDEPS=[
-        "$BUILD_DIR/mongo/db/query/ce/test_utils",
         "$BUILD_DIR/mongo/db/query/stats/stats_test_utils",
         "cbp_ce_test_helpers",
         "histogram_helpers",
