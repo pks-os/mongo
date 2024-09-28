@@ -56,9 +56,9 @@
 #include "mongo/db/service_context.h"
 #include "mongo/db/shard_id.h"
 #include "mongo/executor/scoped_task_executor.h"
-#include "mongo/platform/mutex.h"
 #include "mongo/s/resharding/common_types_gen.h"
 #include "mongo/s/resharding/type_collection_fields_gen.h"
+#include "mongo/stdx/mutex.h"
 #include "mongo/util/assert_util_core.h"
 #include "mongo/util/cancellation.h"
 #include "mongo/util/concurrency/thread_pool.h"
@@ -339,6 +339,7 @@ private:
     const CommonReshardingMetadata _metadata;
     const Milliseconds _minimumOperationDuration;
     const boost::optional<std::size_t> _oplogBatchTaskCount;
+    const OptionalBool _relaxed;
 
     // The in-memory representation of the mutable portion of the document in
     // config.localReshardingOperations.recipient.

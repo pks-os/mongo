@@ -92,12 +92,12 @@ void OplogApplier::shutdown() {
         LOGV2_FATAL_NOTRACE(40304, "Turn off rsSyncApplyStop before attempting clean shutdown");
     }
 
-    stdx::lock_guard<Latch> lock(_mutex);
+    stdx::lock_guard<stdx::mutex> lock(_mutex);
     _inShutdown = true;
 }
 
 bool OplogApplier::inShutdown() const {
-    stdx::lock_guard<Latch> lock(_mutex);
+    stdx::lock_guard<stdx::mutex> lock(_mutex);
     return _inShutdown;
 }
 
@@ -191,7 +191,7 @@ std::unique_ptr<ThreadPool> makeReplWorkerPool(int threadCount,
         Client::initThread(getThreadName(),
                            getGlobalServiceContext()->getService(ClusterRole::ShardServer));
         auto client = Client::getCurrent();
-        AuthorizationSession::get(*client)->grantInternalAuthorization(client);
+        AuthorizationSession::get(*client)->grantInternalAuthorization();
 
         if (!isKillableByStepdown) {
             stdx::lock_guard<Client> lk(*client);

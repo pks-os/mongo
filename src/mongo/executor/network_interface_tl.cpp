@@ -447,7 +447,7 @@ NetworkInterfaceTL::CommandStateBase::~CommandStateBase() {
 void NetworkInterfaceTL::CommandStateBase::cancel(Status status) {
     invariant(!status.isOK());
     {
-        stdx::lock_guard<Mutex> lk(cancelMutex);
+        stdx::lock_guard<stdx::mutex> lk(cancelMutex);
         if (!cancelStatus.isOK()) {
             LOGV2_DEBUG(9257001,
                         2,
@@ -662,7 +662,7 @@ void NetworkInterfaceTL::ExhaustCommandState::continueExhaustRequest(
 
     // Reset the stopwatch to measure the correct duration for the following reply
     {
-        stdx::lock_guard<Latch> lk(stopwatchMutex);
+        stdx::lock_guard<stdx::mutex> lk(stopwatchMutex);
         stopwatch.restart();
     }
     if (deadline != kNoExpirationDate) {
@@ -709,7 +709,7 @@ void NetworkInterfaceTL::cancelCommand(const TaskExecutor::CallbackHandle& cbHan
                                        const BatonHandle&) {
     std::shared_ptr<NetworkInterfaceTL::CommandStateBase> cmdStateToCancel;
     {
-        stdx::unique_lock<Mutex> lk(_mutex);
+        stdx::unique_lock<stdx::mutex> lk(_mutex);
         auto it = _inProgress.find(cbHandle);
         if (it == _inProgress.end()) {
             return;
@@ -786,7 +786,7 @@ SemiFuture<void> NetworkInterfaceTL::setAlarm(Date_t when, const CancellationTok
     auto alarmState = std::make_shared<AlarmState>(this, id, _reactor->makeTimer(), token);
 
     {
-        stdx::lock_guard<Mutex> lk(_mutex);
+        stdx::lock_guard<stdx::mutex> lk(_mutex);
 
         if (_inShutdown_inlock(lk)) {
             // Check that we've won any possible race with _shutdownAllAlarms();
@@ -803,18 +803,23 @@ SemiFuture<void> NetworkInterfaceTL::setAlarm(Date_t when, const CancellationTok
     auto future =
         alarmState->timer->waitUntil(when, nullptr).tapAll([alarmState](Status status) {});
 
-    alarmState->source.token().onCancel().thenRunOn(_reactor).getAsync(
+    alarmState->source.token().onCancel().unsafeToInlineFuture().getAsync(
         [this, weakAlarmState = std::weak_ptr(alarmState)](Status status) {
             if (!status.isOK()) {
                 return;
             }
 
-            auto alarmState = weakAlarmState.lock();
-            if (!alarmState) {
-                return;
-            }
+            _reactor->schedule([this, weakAlarmState = std::move(weakAlarmState)](Status s) {
+                if (!s.isOK()) {
+                    return;
+                }
+                auto alarmState = weakAlarmState.lock();
+                if (!alarmState) {
+                    return;
+                }
 
-            alarmState->timer->cancel();
+                alarmState->timer->cancel();
+            });
         });
 
     return std::move(future).semi();
@@ -822,7 +827,7 @@ SemiFuture<void> NetworkInterfaceTL::setAlarm(Date_t when, const CancellationTok
 
 void NetworkInterfaceTL::_shutdownAllAlarms() {
     auto alarms = [&] {
-        stdx::unique_lock<Mutex> lk(_mutex);
+        stdx::unique_lock<stdx::mutex> lk(_mutex);
         invariant(_state == kStopping);
         return _inProgressAlarms;
     }();
@@ -836,13 +841,13 @@ void NetworkInterfaceTL::_shutdownAllAlarms() {
     }
 
     {
-        stdx::unique_lock<Mutex> lk(_mutex);
+        stdx::unique_lock<stdx::mutex> lk(_mutex);
         _stoppedCV.wait(lk, [&] { return _inProgressAlarms.empty(); });
     }
 }
 
 void NetworkInterfaceTL::_removeAlarm(std::uint64_t id) {
-    stdx::lock_guard<Mutex> lk(_mutex);
+    stdx::lock_guard<stdx::mutex> lk(_mutex);
     auto it = _inProgressAlarms.find(id);
     invariant(it != _inProgressAlarms.end());
     _inProgressAlarms.erase(it);
@@ -1001,7 +1006,7 @@ ExecutorFuture<RemoteCommandResponse> NetworkInterfaceTL::_runCommand(
         .onCompletion([cmdState, this](StatusWith<RemoteCommandResponse> swResponse) noexcept {
             // If the command was cancelled for a reason, return a status that reflects that.
             if (swResponse == ErrorCodes::CallbackCanceled) {
-                stdx::lock_guard<Mutex> lk(cmdState->cancelMutex);
+                stdx::lock_guard<stdx::mutex> lk(cmdState->cancelMutex);
                 if (!cmdState->cancelStatus.isOK()) {
                     swResponse = cmdState->cancelStatus;
                 }

@@ -106,7 +106,7 @@ void ShardingReady::_transitionToConfigShard(ServiceContext* serviceContext) {
     auto uniqueOpCtx = clientGuard->makeOperationContext();
 
     auto as = AuthorizationSession::get(uniqueOpCtx->getClient());
-    as->grantInternalAuthorization(uniqueOpCtx.get());
+    as->grantInternalAuthorization();
 
     ShardingCatalogManager::get(uniqueOpCtx.get())->addConfigShard(uniqueOpCtx.get());
     LOGV2(7910800, "Auto-bootstrap to config shard complete.");
@@ -125,7 +125,7 @@ SharedSemiFuture<void> ShardingReady::isReadyFuture() const {
 }
 
 void ShardingReady::setIsReady() {
-    stdx::lock_guard<Latch> lk(_mutex);
+    stdx::lock_guard<stdx::mutex> lk(_mutex);
     if (!_isReady.getFuture().isReady()) {
         _isReady.emplaceValue();
     }

@@ -46,7 +46,6 @@
 #include "mongo/bson/util/builder.h"
 #include "mongo/bson/util/builder_fwd.h"
 #include "mongo/client/connection_string.h"
-#include "mongo/platform/mutex.h"
 #include "mongo/transport/transport_layer.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/net/hostandport.h"
@@ -268,6 +267,10 @@ public:
 
     // TODO: SERVER-80343 Remove this ifdef once gRPC is compiled on all variants
 #ifdef MONGO_CONFIG_GRPC
+    void setIsGRPC(bool isGRPC) {
+        _gRPC = isGRPC;
+    }
+
     bool isGRPC() const {
         return _gRPC.get_value_or(false);
     }

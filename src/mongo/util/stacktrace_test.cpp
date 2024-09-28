@@ -66,8 +66,8 @@
 #include "mongo/logv2/log_component.h"
 #include "mongo/logv2/log_truncation.h"
 #include "mongo/platform/compiler.h"
-#include "mongo/platform/mutex.h"
 #include "mongo/stdx/condition_variable.h"
+#include "mongo/stdx/mutex.h"
 #include "mongo/stdx/thread.h"
 #include "mongo/unittest/assert.h"
 #include "mongo/unittest/framework.h"
@@ -224,9 +224,13 @@ TEST(StackTrace, PosixFormat) {
         auto soObj = so.Obj();
         SoMapEntry ent{};
         ent.base = fromHex(soObj["b"].String());
-        if (soObj.hasField("path")) {
-            ent.path = soObj["path"].String();
-        }
+        ASSERT_TRUE(soObj.hasField("path"))
+            << "no path for entry with base address " << soObj["b"].String();
+        ent.path = soObj["path"].String();
+        ASSERT_FALSE(ent.path.empty());
+        ASSERT_TRUE(soMap.find(ent.base) == soMap.end())
+            << "Duplicate entry for base address " << soObj["b"].String() << " found both "
+            << ent.path << " and " << soMap[ent.base].path;
         soMap[ent.base] = ent;
     }
 
@@ -537,7 +541,7 @@ class PrintAllThreadStacksTest : public unittest::Test {
 public:
     struct WatchInt {
         int v = 0;
-        Mutex* m;
+        stdx::mutex* m;
         stdx::condition_variable cond;
 
         void incr(int i) {
@@ -609,7 +613,7 @@ public:
             ASSERT(seenTids.find(w.tid) != seenTids.end()) << "missing tid:" << w.tid;
     }
 
-    Mutex mutex;
+    stdx::mutex mutex;
     WatchInt endAll{0, &mutex};
     WatchInt pending{0, &mutex};
     std::deque<Worker> workers;

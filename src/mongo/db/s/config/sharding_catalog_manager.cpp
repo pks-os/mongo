@@ -214,8 +214,7 @@ BSONObj commitOrAbortTransaction(OperationContext* opCtx,
     AlternativeClientRegion acr(newClient);
     auto newOpCtx = cc().makeOperationContext();
     newOpCtx->setAlwaysInterruptAtStepDownOrUp_UNSAFE();
-    AuthorizationSession::get(newOpCtx.get()->getClient())
-        ->grantInternalAuthorization(newOpCtx.get()->getClient());
+    AuthorizationSession::get(newOpCtx.get()->getClient())->grantInternalAuthorization();
     {
         auto lk = stdx::lock_guard(*newOpCtx->getClient());
         newOpCtx->setLogicalSessionId(opCtx->getLogicalSessionId().value());
@@ -692,7 +691,7 @@ ShardingCatalogManager::~ShardingCatalogManager() {
 }
 
 void ShardingCatalogManager::startup() {
-    stdx::lock_guard<Latch> lk(_mutex);
+    stdx::lock_guard<stdx::mutex> lk(_mutex);
     if (_started) {
         return;
     }
@@ -713,7 +712,7 @@ void ShardingCatalogManager::shutDown() {
 
 Status ShardingCatalogManager::initializeConfigDatabaseIfNeeded(OperationContext* opCtx) {
     {
-        stdx::lock_guard<Latch> lk(_mutex);
+        stdx::lock_guard<stdx::mutex> lk(_mutex);
         if (_configInitialized) {
             return {ErrorCodes::AlreadyInitialized,
                     "Config database was previously loaded into memory"};
@@ -743,7 +742,7 @@ Status ShardingCatalogManager::initializeConfigDatabaseIfNeeded(OperationContext
         return status;
     }
 
-    stdx::lock_guard<Latch> lk(_mutex);
+    stdx::lock_guard<stdx::mutex> lk(_mutex);
     _configInitialized = true;
 
     return Status::OK();
@@ -760,7 +759,7 @@ const std::shared_ptr<Shard>& ShardingCatalogManager::localConfigShard() {
 }
 
 void ShardingCatalogManager::discardCachedConfigDatabaseInitializationState() {
-    stdx::lock_guard<Latch> lk(_mutex);
+    stdx::lock_guard<stdx::mutex> lk(_mutex);
     _configInitialized = false;
 }
 
@@ -1357,7 +1356,7 @@ void ShardingCatalogManager::withTransaction(
     AlternativeSessionRegion asr(opCtx);
     auto* const client = asr.opCtx()->getClient();
     asr.opCtx()->setAlwaysInterruptAtStepDownOrUp_UNSAFE();
-    AuthorizationSession::get(client)->grantInternalAuthorization(client);
+    AuthorizationSession::get(client)->grantInternalAuthorization();
     TxnNumber txnNumber = 0;
 
     ScopeGuard guard([opCtx = asr.opCtx(), &txnNumber, &writeConcern] {
@@ -1550,7 +1549,7 @@ void ShardingCatalogManager::initializePlacementHistory(OperationContext* opCtx)
             stdx::lock_guard<Client> lk(*altClient.get());
             altClient.get()->setSystemOperationUnkillableByStepdown(lk);
         }
-        AuthorizationSession::get(altClient.get())->grantInternalAuthorization(altClient.get());
+        AuthorizationSession::get(altClient.get())->grantInternalAuthorization();
         AlternativeClientRegion acr(altClient);
         auto executor =
             Grid::get(opCtx->getServiceContext())->getExecutorPool()->getFixedExecutor();

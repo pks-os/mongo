@@ -272,7 +272,7 @@ MigrationSourceManager::MigrationSourceManager(OperationContext* opCtx,
                                                _args.getMaxChunkSizeBytes(),
                                                true /* needMaxBound */);
 
-            stdx::lock_guard<Latch> lg(_mutex);
+            stdx::lock_guard<stdx::mutex> lg(_mutex);
             _args.getMoveRangeRequestBase().setMax(max);
             _moveTimingHelper.setMax(max);
         } else if (!_args.getMin().has_value()) {
@@ -288,7 +288,7 @@ MigrationSourceManager::MigrationSourceManager(OperationContext* opCtx,
                                                _args.getMaxChunkSizeBytes(),
                                                false /* needMaxBound */);
 
-            stdx::lock_guard<Latch> lg(_mutex);
+            stdx::lock_guard<stdx::mutex> lg(_mutex);
             _args.getMoveRangeRequestBase().setMin(min);
             _moveTimingHelper.setMin(min);
         }
@@ -441,7 +441,7 @@ void MigrationSourceManager::startClone() {
         // migration, write operations require the cloner to be present in order to track changes to
         // the chunk which needs to be transmitted to the recipient.
         {
-            stdx::lock_guard<Latch> lg(_mutex);
+            stdx::lock_guard<stdx::mutex> lg(_mutex);
             _cloneDriver = std::make_shared<MigrationChunkClonerSource>(_opCtx,
                                                                         _args,
                                                                         _writeConcern,
@@ -466,8 +466,8 @@ void MigrationSourceManager::startClone() {
     // Refreshing the collection routing information after starting the clone driver will give us a
     // stable view on whether the recipient is owning other chunks of the collection (a condition
     // that will be later evaluated).
-    uassertStatusOK(Grid::get(_opCtx)->catalogCache()->getCollectionRoutingInfoWithPlacementRefresh(
-        _opCtx, nss()));
+    uassertStatusOK(
+        Grid::get(_opCtx)->catalogCache()->getCollectionPlacementInfoWithRefresh(_opCtx, nss()));
 
     if (replEnabled) {
         auto const readConcernArgs = repl::ReadConcernArgs(
@@ -943,7 +943,7 @@ BSONObj MigrationSourceManager::getMigrationStatusReport(
     // Important: This method is being called from a thread other than the main one, therefore we
     // have to protect with `_mutex` any write to the attributes read by getMigrationStatusReport()
     // like `_args` or `_cloneDriver`
-    stdx::lock_guard<Latch> lg(_mutex);
+    stdx::lock_guard<stdx::mutex> lg(_mutex);
 
     boost::optional<long long> sessionOplogEntriesToBeMigratedSoFar;
     boost::optional<long long> sessionOplogEntriesSkippedSoFarLowerBound;

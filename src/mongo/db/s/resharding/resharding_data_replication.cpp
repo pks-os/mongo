@@ -106,7 +106,8 @@ std::unique_ptr<ReshardingCollectionCloner> ReshardingDataReplication::_makeColl
     ReshardingMetrics* metrics,
     const CommonReshardingMetadata& metadata,
     const ShardId& myShardId,
-    Timestamp cloneTimestamp) {
+    Timestamp cloneTimestamp,
+    bool relaxed) {
     return std::make_unique<ReshardingCollectionCloner>(
         metrics,
         metadata.getReshardingUUID(),
@@ -115,7 +116,8 @@ std::unique_ptr<ReshardingCollectionCloner> ReshardingDataReplication::_makeColl
         metadata.getSourceUUID(),
         myShardId,
         cloneTimestamp,
-        metadata.getTempReshardingNss());
+        metadata.getTempReshardingNss(),
+        relaxed);
 }
 
 std::vector<std::unique_ptr<ReshardingTxnCloner>> ReshardingDataReplication::_makeTxnCloners(
@@ -201,7 +203,7 @@ std::shared_ptr<executor::TaskExecutor> ReshardingDataReplication::_makeCollecti
         Client::initThread(threadName.c_str(),
                            getGlobalServiceContext()->getService(ClusterRole::ShardServer));
         auto* client = Client::getCurrent();
-        AuthorizationSession::get(*client)->grantInternalAuthorization(client);
+        AuthorizationSession::get(*client)->grantInternalAuthorization();
     };
 
     auto executor = executor::ThreadPoolTaskExecutor::create(
@@ -267,7 +269,8 @@ std::unique_ptr<ReshardingDataReplicationInterface> ReshardingDataReplication::m
     Timestamp cloneTimestamp,
     bool cloningDone,
     ShardId myShardId,
-    ChunkManager sourceChunkMgr) {
+    ChunkManager sourceChunkMgr,
+    bool relaxed) {
     std::unique_ptr<ReshardingCollectionCloner> collectionCloner;
     std::vector<std::unique_ptr<ReshardingTxnCloner>> txnCloners;
 
@@ -281,7 +284,8 @@ std::unique_ptr<ReshardingDataReplicationInterface> ReshardingDataReplication::m
                 CollectionOptions{});
             collectionClonerExecutor = _makeCollectionClonerExecutor(donorShards.size());
         }
-        collectionCloner = _makeCollectionCloner(metrics, metadata, myShardId, cloneTimestamp);
+        collectionCloner =
+            _makeCollectionCloner(metrics, metadata, myShardId, cloneTimestamp, relaxed);
         txnCloners = _makeTxnCloners(metadata, donorShards);
     }
 

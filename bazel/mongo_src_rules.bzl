@@ -451,6 +451,9 @@ GCC_OR_CLANG_WARNINGS_COPTS = select({
         # search path but can't be used.
         "-Winvalid-pch",
 
+        # Warn when hiding a virtual function.
+        "-Woverloaded-virtual",
+
         # This warning was added in g++-4.8.
         "-Wno-unused-local-typedefs",
 
@@ -474,6 +477,9 @@ GCC_OR_CLANG_WARNINGS_COPTS = select({
         # SERVER-76472 we don't try to maintain ABI so disable warnings about
         # possible ABI issues.
         "-Wno-psabi",
+
+        # Warn about moves of prvalues, which can inhibit copy elision.
+        "-Wpessimizing-move",
     ],
     "//conditions:default": [],
 })
@@ -1371,7 +1377,8 @@ def mongo_cc_library(
         non_transitive_dyn_linkopts = [],
         defines = [],
         additional_linker_inputs = [],
-        features = []):
+        features = [],
+        exec_properties = {}):
     """Wrapper around cc_library.
 
     Args:
@@ -1437,6 +1444,17 @@ def mongo_cc_library(
         })
     else:
         enterprise_compatible = []
+
+    if "compile_requires_large_memory" in tags:
+        exec_properties |= select({
+            "//bazel/config:gcc_x86_64": {
+                "Pool": "large_mem_x86_64",
+            },
+            "//bazel/config:gcc_aarch64": {
+                "Pool": "large_memory_arm64",
+            },
+            "//conditions:default": {},
+        })
 
     fincludes_copt = force_includes_copt(native.package_name(), name)
     fincludes_hdr = force_includes_hdr(native.package_name(), name)
@@ -1517,6 +1535,7 @@ def mongo_cc_library(
             "//conditions:default": ["@platforms//:incompatible"],
         }) + target_compatible_with + enterprise_compatible,
         additional_linker_inputs = additional_linker_inputs + MONGO_GLOBAL_ADDITIONAL_LINKER_INPUTS,
+        exec_properties = exec_properties,
     )
     cc_library(
         name = name + WITH_DEBUG_SUFFIX,
@@ -1541,6 +1560,7 @@ def mongo_cc_library(
         }) + features,
         target_compatible_with = target_compatible_with + enterprise_compatible,
         additional_linker_inputs = additional_linker_inputs + MONGO_GLOBAL_ADDITIONAL_LINKER_INPUTS,
+        exec_properties = exec_properties,
     )
 
     # Creates a shared library version of our target only if
@@ -1563,6 +1583,7 @@ def mongo_cc_library(
             "//conditions:default": [],
         }),
         additional_linker_inputs = additional_linker_inputs + MONGO_GLOBAL_ADDITIONAL_LINKER_INPUTS,
+        exec_properties = exec_properties,
     )
 
     extract_debuginfo(
