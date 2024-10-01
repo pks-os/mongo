@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2023-present MongoDB, Inc.
+ *    Copyright (C) 2024-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -27,15 +27,21 @@
  *    it in the license file.
  */
 
-#pragma once
+#include <cstddef>
 
-#include "mongo/db/query/optimizer/syntax/syntax.h"
+#include "mongo/db/timeseries/bucket_catalog/global_bucket_catalog.h"
 
-namespace mongo::optimizer {
-/**
- * Attempts to translate the input ABT into a vector of arguments that can be passed to a makeObj or
- * makeBsonObj SBE function call (starting with a valid MakeObjSpec translation of the input path).
- * If translation fails, an empty vector is returned.
- */
-ABTVector generateMakeObjArgs(const ABT& arg);
-}  // namespace mongo::optimizer
+namespace mongo::timeseries::bucket_catalog {
+namespace {
+const auto getGlobalBucketCatalog = ServiceContext::declareDecoration<GlobalBucketCatalog>();
+static constexpr std::size_t kNumStripes = 32;
+}  // namespace
+
+GlobalBucketCatalog& GlobalBucketCatalog::get(ServiceContext* svcCtx) {
+    return getGlobalBucketCatalog(svcCtx);
+}
+
+GlobalBucketCatalog::GlobalBucketCatalog()
+    : BucketCatalog(kNumStripes, getTimeseriesIdleBucketExpiryMemoryUsageThresholdBytes) {}
+
+}  // namespace mongo::timeseries::bucket_catalog

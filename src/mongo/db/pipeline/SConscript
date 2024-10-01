@@ -27,18 +27,6 @@ env.Library(
     ],
 )
 
-env.Library(
-    target="docs_needed_bounds_visitor",
-    source=["visitors/document_source_visitor_docs_needed_bounds.cpp"],
-    LIBDEPS_PRIVATE=[
-        "change_stream_pipeline",
-        "docs_needed_bounds",
-        "document_source_internal_apply_oplog_update",
-        "pipeline",
-        "pipeline_visitor",
-    ],
-)
-
 env.Benchmark(
     target="document_source_group_bm",
     source=[
@@ -50,18 +38,6 @@ env.Benchmark(
         "$BUILD_DIR/mongo/db/service_context_test_fixture",
         "document_source_mock",
         "pipeline",
-    ],
-)
-
-env.Library(
-    target="change_stream_expired_pre_image_remover",
-    source=[
-        "change_stream_expired_pre_image_remover.cpp",
-    ],
-    LIBDEPS_PRIVATE=[
-        "$BUILD_DIR/mongo/db/change_stream_pre_images_collection_manager",
-        "$BUILD_DIR/mongo/db/shard_role",
-        "$BUILD_DIR/mongo/util/periodic_runner",
     ],
 )
 

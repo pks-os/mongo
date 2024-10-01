@@ -133,6 +133,7 @@
 #include "mongo/db/timeseries/bucket_catalog/bucket_catalog_internal.h"
 #include "mongo/db/timeseries/bucket_catalog/bucket_identifiers.h"
 #include "mongo/db/timeseries/bucket_catalog/closed_bucket.h"
+#include "mongo/db/timeseries/bucket_catalog/global_bucket_catalog.h"
 #include "mongo/db/timeseries/bucket_catalog/write_batch.h"
 #include "mongo/db/timeseries/bucket_compression.h"
 #include "mongo/db/timeseries/bucket_compression_failure.h"
@@ -871,7 +872,7 @@ UpdateResult performUpdate(OperationContext* opCtx,
 
     {
         stdx::lock_guard<Client> lk(*opCtx->getClient());
-        CurOp::get(opCtx)->setPlanSummary_inlock(exec->getPlanExplainer().getPlanSummary());
+        CurOp::get(opCtx)->setPlanSummary(lk, exec->getPlanExplainer().getPlanSummary());
     }
 
     if (updateRequest->shouldReturnAnyDocs()) {
@@ -991,7 +992,7 @@ long long performDelete(OperationContext* opCtx,
 
     {
         stdx::lock_guard<Client> lk(*opCtx->getClient());
-        CurOp::get(opCtx)->setPlanSummary_inlock(exec->getPlanExplainer().getPlanSummary());
+        CurOp::get(opCtx)->setPlanSummary(lk, exec->getPlanExplainer().getPlanSummary());
     }
 
     if (deleteRequest->getReturnDeleted()) {
@@ -1139,8 +1140,8 @@ WriteResult performInserts(OperationContext* opCtx,
     // Timeseries inserts already did as part of performTimeseriesWrites.
     if (source != OperationSource::kTimeseriesInsert) {
         stdx::lock_guard<Client> lk(*opCtx->getClient());
-        curOp.setNS_inlock(wholeOp.getNamespace());
-        curOp.setLogicalOp_inlock(LogicalOp::opInsert);
+        curOp.setNS(lk, wholeOp.getNamespace());
+        curOp.setLogicalOp(lk, LogicalOp::opInsert);
         curOp.ensureStarted();
         // Initialize 'ninserted' for the operation if is not yet.
         curOp.debug().additiveMetrics.incrementNinserted(0);
@@ -1284,7 +1285,7 @@ static SingleWriteResult performSingleUpdateOpNoRetry(OperationContext* opCtx,
 
     {
         stdx::lock_guard<Client> lk(*opCtx->getClient());
-        CurOp::get(opCtx)->setPlanSummary_inlock(exec->getPlanExplainer().getPlanSummary());
+        CurOp::get(opCtx)->setPlanSummary(lk, exec->getPlanExplainer().getPlanSummary());
     }
 
     auto updateResult = exec->executeUpdate();
@@ -1463,11 +1464,12 @@ static SingleWriteResult performSingleUpdateOpWithDupKeyRetry(
         ServerWriteConcernMetrics::get(opCtx)->recordWriteConcernForUpdate(
             opCtx->getWriteConcern());
         stdx::lock_guard<Client> lk(*opCtx->getClient());
-        curOp.setNS_inlock(
-            source == OperationSource::kTimeseriesUpdate ? ns.getTimeseriesViewNamespace() : ns);
-        curOp.setNetworkOp_inlock(dbUpdate);
-        curOp.setLogicalOp_inlock(LogicalOp::opUpdate);
-        curOp.setOpDescription_inlock(op.toBSON());
+        curOp.setNS(lk,
+                    source == OperationSource::kTimeseriesUpdate ? ns.getTimeseriesViewNamespace()
+                                                                 : ns);
+        curOp.setNetworkOp(lk, dbUpdate);
+        curOp.setLogicalOp(lk, LogicalOp::opUpdate);
+        curOp.setOpDescription(lk, op.toBSON());
         curOp.ensureStarted();
     }
 
@@ -1748,7 +1750,8 @@ WriteResult performUpdates(OperationContext* opCtx,
                 // Special case for failed attempt to compress a reopened bucket.
                 throw;
             } else if (source == OperationSource::kTimeseriesUpdate) {
-                auto& bucketCatalog = timeseries::bucket_catalog::BucketCatalog::get(opCtx);
+                auto& bucketCatalog = timeseries::bucket_catalog::GlobalBucketCatalog::get(
+                    opCtx->getServiceContext());
                 timeseries::bucket_catalog::freeze(
                     bucketCatalog,
                     timeseries::bucket_catalog::BucketId{
@@ -1810,11 +1813,12 @@ static SingleWriteResult performSingleDeleteOp(OperationContext* opCtx,
     auto& curOp = *CurOp::get(opCtx);
     {
         stdx::lock_guard<Client> lk(*opCtx->getClient());
-        curOp.setNS_inlock(
-            source == OperationSource::kTimeseriesDelete ? ns.getTimeseriesViewNamespace() : ns);
-        curOp.setNetworkOp_inlock(dbDelete);
-        curOp.setLogicalOp_inlock(LogicalOp::opDelete);
-        curOp.setOpDescription_inlock(op.toBSON());
+        curOp.setNS(lk,
+                    source == OperationSource::kTimeseriesDelete ? ns.getTimeseriesViewNamespace()
+                                                                 : ns);
+        curOp.setNetworkOp(lk, dbDelete);
+        curOp.setLogicalOp(lk, LogicalOp::opDelete);
+        curOp.setOpDescription(lk, op.toBSON());
         curOp.ensureStarted();
     }
 
@@ -1876,7 +1880,7 @@ static SingleWriteResult performSingleDeleteOp(OperationContext* opCtx,
 
     {
         stdx::lock_guard<Client> lk(*opCtx->getClient());
-        CurOp::get(opCtx)->setPlanSummary_inlock(exec->getPlanExplainer().getPlanSummary());
+        CurOp::get(opCtx)->setPlanSummary(lk, exec->getPlanExplainer().getPlanSummary());
     }
 
     auto nDeleted = exec->executeDelete();
@@ -2324,7 +2328,7 @@ namespace {
 
 using TimeseriesBatches =
     std::vector<std::pair<std::shared_ptr<timeseries::bucket_catalog::WriteBatch>, size_t>>;
-using TimeseriesStmtIds = stdx::unordered_map<OID, std::vector<StmtId>, OID::Hasher>;
+using TimeseriesStmtIds = timeseries::TimeseriesStmtIds;
 struct TimeseriesSingleWriteResult {
     StatusWith<SingleWriteResult> result;
     bool canContinue = true;
@@ -2585,7 +2589,8 @@ bool commitTimeseriesBucket(OperationContext* opCtx,
                             std::vector<size_t>* docsToRetry,
                             absl::flat_hash_map<int, int>& retryAttemptsForDup,
                             const write_ops::InsertCommandRequest& request) try {
-    auto& bucketCatalog = timeseries::bucket_catalog::BucketCatalog::get(opCtx);
+    auto& bucketCatalog =
+        timeseries::bucket_catalog::GlobalBucketCatalog::get(opCtx->getServiceContext());
 
     auto metadata = getMetadata(bucketCatalog, batch->bucketId);
     auto status = prepareCommit(bucketCatalog, request.getNamespace(), batch);
@@ -2664,7 +2669,8 @@ bool commitTimeseriesBucket(OperationContext* opCtx,
     }
     return true;
 } catch (const DBException& ex) {
-    auto& bucketCatalog = timeseries::bucket_catalog::BucketCatalog::get(opCtx);
+    auto& bucketCatalog =
+        timeseries::bucket_catalog::GlobalBucketCatalog::get(opCtx->getServiceContext());
     abort(bucketCatalog, batch, ex.toStatus());
     throw;
 }
@@ -2680,7 +2686,8 @@ bool commitTimeseriesBucketsAtomically(OperationContext* opCtx,
                                        TimeseriesStmtIds&& stmtIds,
                                        boost::optional<repl::OpTime>* opTime,
                                        boost::optional<OID>* electionId) {
-    auto& bucketCatalog = timeseries::bucket_catalog::BucketCatalog::get(opCtx);
+    auto& bucketCatalog =
+        timeseries::bucket_catalog::GlobalBucketCatalog::get(opCtx->getServiceContext());
 
     auto batchesToCommit = timeseries::determineBatchesToCommit(batches, extractFromPair);
     if (batchesToCommit.empty()) {
@@ -2836,7 +2843,8 @@ void getTimeseriesBatchResultsBase(OperationContext* opCtx,
         // error.
         if (itr > indexOfLastProcessedBatch &&
             timeseries::bucket_catalog::claimWriteBatchCommitRights(*batch)) {
-            auto& bucketCatalog = timeseries::bucket_catalog::BucketCatalog::get(opCtx);
+            auto& bucketCatalog =
+                timeseries::bucket_catalog::GlobalBucketCatalog::get(opCtx->getServiceContext());
             abort(bucketCatalog, batch, lastError->getStatus());
             errors->emplace_back(start + index, lastError->getStatus());
             continue;
@@ -2943,7 +2951,8 @@ insertIntoBucketCatalog(OperationContext* opCtx,
                         bool* containsRetry) {
     hangInsertIntoBucketCatalogBeforeCheckingTimeseriesCollection.pauseWhileSet();
 
-    auto& bucketCatalog = timeseries::bucket_catalog::BucketCatalog::get(opCtx);
+    auto& bucketCatalog =
+        timeseries::bucket_catalog::GlobalBucketCatalog::get(opCtx->getServiceContext());
     auto bucketsNs = makeTimeseriesBucketsNamespace(ns(request));
 
     // Explicitly hold a refrence to the CollectionCatalog, such that the corresponding
@@ -3042,7 +3051,7 @@ insertIntoBucketCatalog(OperationContext* opCtx,
         batches.emplace_back(std::move(insertResult->batch), index);
         const auto& batch = batches.back().first;
         if (isTimeseriesWriteRetryable(opCtx)) {
-            stmtIds[batch->bucketId.oid].push_back(stmtId);
+            stmtIds[batch.get()].push_back(stmtId);
         }
 
         // If this insert closed buckets, rewrite to be a compressed column. If we cannot
@@ -3158,7 +3167,8 @@ std::vector<size_t> performUnorderedTimeseriesWrites(
     auto reportMeasurementsGuard =
         ScopeGuard([&collectionUUID, &handledElsewhere, &request, opCtx]() {
             if (handledElsewhere > 0) {
-                auto& bucketCatalog = timeseries::bucket_catalog::BucketCatalog::get(opCtx);
+                auto& bucketCatalog = timeseries::bucket_catalog::GlobalBucketCatalog::get(
+                    opCtx->getServiceContext());
                 timeseries::bucket_catalog::reportMeasurementsGroupCommitted(
                     bucketCatalog, collectionUUID, handledElsewhere);
             }
@@ -3169,9 +3179,8 @@ std::vector<size_t> performUnorderedTimeseriesWrites(
         auto& [batch, index] = batches[itr];
         if (timeseries::bucket_catalog::claimWriteBatchCommitRights(*batch)) {
             handledHere.insert(batch.get());
-            auto stmtIds = isTimeseriesWriteRetryable(opCtx)
-                ? std::move(bucketStmtIds[batch->bucketId.oid])
-                : std::vector<StmtId>{};
+            auto stmtIds = isTimeseriesWriteRetryable(opCtx) ? std::move(bucketStmtIds[batch.get()])
+                                                             : std::vector<StmtId>{};
             try {
                 canContinue = commitTimeseriesBucket(opCtx,
                                                      batch,
@@ -3190,7 +3199,8 @@ std::vector<size_t> performUnorderedTimeseriesWrites(
                     ex.extraInfo<timeseries::BucketCompressionFailure>()->keySignature();
 
                 timeseries::bucket_catalog::freeze(
-                    timeseries::bucket_catalog::BucketCatalog::get(opCtx),
+                    timeseries::bucket_catalog::GlobalBucketCatalog::get(
+                        opCtx->getServiceContext()),
                     timeseries::bucket_catalog::BucketId{collectionUUID, bucketId, keySignature});
 
                 LOGV2_WARNING(
@@ -3308,10 +3318,11 @@ write_ops::InsertCommandReply performTimeseriesWrites(
     {
         stdx::lock_guard<Client> lk(*opCtx->getClient());
         auto requestNs = ns(request);
-        curOp.setNS_inlock(requestNs.isTimeseriesBucketsCollection()
-                               ? requestNs.getTimeseriesViewNamespace()
-                               : requestNs);
-        curOp.setLogicalOp_inlock(LogicalOp::opInsert);
+        curOp.setNS(lk,
+                    requestNs.isTimeseriesBucketsCollection()
+                        ? requestNs.getTimeseriesViewNamespace()
+                        : requestNs);
+        curOp.setLogicalOp(lk, LogicalOp::opInsert);
         curOp.ensureStarted();
         // Initialize 'ninserted' for the operation if is not yet.
         curOp.debug().additiveMetrics.incrementNinserted(0);

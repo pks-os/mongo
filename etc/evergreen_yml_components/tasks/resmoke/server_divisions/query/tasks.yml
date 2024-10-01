@@ -249,7 +249,7 @@ tasks:
     tags:
       [
         "assigned_to_jira_team_server_query_execution",
-        "release_critical",
+        "auxiliary",
         "fuzzer_deterministic",
         "common",
         "multiversion",
@@ -408,7 +408,7 @@ tasks:
     tags:
       [
         "assigned_to_jira_team_server_query_execution",
-        "release_critical",
+        "auxiliary",
         "fuzzer_deterministic",
         "common",
         "timeseries",
@@ -902,6 +902,13 @@ tasks:
       - func: "run tests"
 
   - <<: *task_template
+    name: query_shape_hash_stability
+    tags: ["assigned_to_jira_team_server_query_execution", "default"]
+    commands:
+      - func: "do setup"
+      - func: "run tests"
+
+  - <<: *task_template
     name: index_filters_to_query_settings
     # Not every build variant speaks 'sbe_only' and this suite requires SBE
     # which can be enforced by 'requires_all_feature_flags'
@@ -1198,7 +1205,7 @@ tasks:
     tags:
       [
         "assigned_to_jira_team_server_query_execution",
-        "release_critical",
+        "auxiliary",
         "fuzzer_deterministic",
         "multiversion",
         "incompatible_mac",
@@ -1334,7 +1341,7 @@ tasks:
     tags:
       [
         "assigned_to_jira_team_server_query_optimization",
-        "release_critical",
+        "auxiliary",
         "fuzzer_deterministic",
         "optimization",
         "incompatible_mac",
@@ -1380,22 +1387,6 @@ tasks:
       - func: "run benchmark tests"
         vars:
           suites: benchmarks_abt_lowering
-          exec_timeout_secs: 18000 # 5 hour timeout.
-          resmoke_jobs_max: 1
-
-  - <<: *benchmark_template
-    name: benchmarks_abt_path_lowering
-    tags:
-      [
-        "assigned_to_jira_team_server_query_optimization",
-        "experimental",
-        "benchmarks",
-      ]
-    commands:
-      - func: "do benchmark setup"
-      - func: "run benchmark tests"
-        vars:
-          suites: benchmarks_abt_path_lowering
           exec_timeout_secs: 18000 # 5 hour timeout.
           resmoke_jobs_max: 1
 
