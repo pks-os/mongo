@@ -488,7 +488,7 @@ Status renameCollectionWithinDBForApplyOps(OperationContext* opCtx,
         if (!targetColl && uuidToDrop) {
             invariant(options.dropTarget);
             auto collToDropBasedOnUUID = getNamespaceFromUUID(opCtx, uuidToDrop.value());
-            if (collToDropBasedOnUUID && !collToDropBasedOnUUID->isDropPendingNamespace()) {
+            if (collToDropBasedOnUUID) {
                 invariant(collToDropBasedOnUUID->isEqualDb(target));
                 targetColl = CollectionCatalog::get(opCtx)->lookupCollectionByNamespace(
                     opCtx, *collToDropBasedOnUUID);
@@ -875,12 +875,25 @@ Status checkTargetCollectionOptionsMatch(const NamespaceString& targetNss,
 Status checkTargetCollectionIndexesMatch(const NamespaceString& targetNss,
                                          const std::list<BSONObj>& expectedIndexes,
                                          const std::list<BSONObj>& currentIndexes) {
+    if (expectedIndexes.size() != currentIndexes.size()) {
+        return Status(ErrorCodes::CommandFailed,
+                      str::stream()
+                          << "indexes of target collection " << targetNss.toStringForErrorMsg()
+                          << " changed during processing.");
+    }
+    // Compare every element of the indexes. Sort the list of indexes to ensure same positioning of
+    // every element.
     UnorderedFieldsBSONObjComparator comparator;
-    if (expectedIndexes.size() != currentIndexes.size() ||
-        !(std::equal(expectedIndexes.begin(),
-                     expectedIndexes.end(),
-                     currentIndexes.begin(),
-                     [&](auto& lhs, auto& rhs) { return comparator.compare(lhs, rhs) == 0; }))) {
+    auto sortedExpectedIndexes(expectedIndexes);
+    sortedExpectedIndexes.sort(
+        [&](auto& lhs, auto& rhs) { return comparator.compare(lhs, rhs) < 0; });
+    auto sortedCurrentIndexes(currentIndexes);
+    sortedCurrentIndexes.sort(
+        [&](auto& lhs, auto& rhs) { return comparator.compare(lhs, rhs) < 0; });
+    if (!std::equal(sortedExpectedIndexes.begin(),
+                    sortedExpectedIndexes.end(),
+                    sortedCurrentIndexes.begin(),
+                    [&](auto& lhs, auto& rhs) { return comparator.compare(lhs, rhs) == 0; })) {
         return Status(ErrorCodes::CommandFailed,
                       str::stream()
                           << "indexes of target collection " << targetNss.toStringForErrorMsg()
@@ -928,12 +941,6 @@ void validateNamespacesForRenameCollection(OperationContext* opCtx,
                   "collection (admin.system.version) is not "
                   "allowed");
     }
-
-    uassert(ErrorCodes::NamespaceNotFound,
-            str::stream() << "renameCollection cannot accept a source collection that is in a "
-                             "drop-pending state: "
-                          << source.toStringForErrorMsg(),
-            !source.isDropPendingNamespace());
 
     uassert(ErrorCodes::IllegalOperation,
             "renaming system.views collection or renaming to system.views is not allowed",
@@ -991,13 +998,6 @@ Status renameCollection(OperationContext* opCtx,
                         const NamespaceString& source,
                         const NamespaceString& target,
                         const RenameCollectionOptions& options) {
-    if (source.isDropPendingNamespace()) {
-        return Status(ErrorCodes::NamespaceNotFound,
-                      str::stream() << "renameCollection() cannot accept a source "
-                                       "collection that is in a drop-pending state: "
-                                    << source.toStringForErrorMsg());
-    }
-
     if (source.isSystemDotViews() || target.isSystemDotViews()) {
         return Status(
             ErrorCodes::IllegalOperation,
@@ -1099,7 +1099,7 @@ Status renameCollectionForApplyOps(OperationContext* opCtx,
         MODE_X,
         AutoGetCollection::Options{}.viewMode(auto_get_collection::ViewMode::kViewsPermitted));
 
-    if (sourceNss.isDropPendingNamespace() || !sourceColl) {
+    if (!sourceColl) {
         boost::optional<NamespaceString> dropTargetNss;
 
         if (options.dropTarget)

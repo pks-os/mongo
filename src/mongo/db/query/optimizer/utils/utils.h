@@ -44,11 +44,9 @@
 #include <boost/optional/optional.hpp>
 #include <fmt/format.h>
 
-#include "mongo/db/query/optimizer/bool_expression.h"
 #include "mongo/db/query/optimizer/comparison_op.h"
 #include "mongo/db/query/optimizer/containers.h"
 #include "mongo/db/query/optimizer/defs.h"
-#include "mongo/db/query/optimizer/index_bounds.h"
 #include "mongo/db/query/optimizer/node.h"  // IWYU pragma: keep
 #include "mongo/db/query/optimizer/node_defs.h"
 #include "mongo/db/query/optimizer/syntax/syntax.h"

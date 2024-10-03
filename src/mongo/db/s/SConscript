@@ -546,7 +546,6 @@ env.Library(
         "sharding_mongod_test_fixture.cpp",
     ],
     LIBDEPS=[
-        "$BUILD_DIR/mongo/db/repl/drop_pending_collection_reaper",
         "$BUILD_DIR/mongo/db/repl/replmocks",
         "$BUILD_DIR/mongo/db/repl/storage_interface_impl",
         "$BUILD_DIR/mongo/db/service_context_d_test_fixture",
@@ -767,6 +766,7 @@ env.CppUnitTest(
         "config/sharding_catalog_manager_remove_shard_test.cpp",
         "config/sharding_catalog_manager_shard_collection_test.cpp",
         "config/sharding_catalog_manager_split_chunk_test.cpp",
+        "config/set_cluster_parameter_coordinator_test.cpp",
         "query_analysis_coordinator_test.cpp",
         "resharding/resharding_coordinator_commit_monitor_test.cpp",
         "resharding/resharding_coordinator_observer_test.cpp",
@@ -812,6 +812,7 @@ env.Benchmark(
     LIBDEPS=[
         "$BUILD_DIR/mongo/db/shard_role_api",
     ],
+    CONSOLIDATED_TARGET="sharding_bm",
 )
 
 env.Benchmark(
@@ -839,6 +840,7 @@ env.Benchmark(
         "$BUILD_DIR/mongo/s/sharding_test_fixture_common",
         "sharding_runtime_d",
     ],
+    CONSOLIDATED_TARGET="sharding_bm",
 )
 
 env.Benchmark(

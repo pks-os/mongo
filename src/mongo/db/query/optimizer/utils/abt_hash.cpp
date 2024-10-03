@@ -47,7 +47,6 @@
 #include "mongo/db/query/optimizer/algebra/polyvalue.h"
 #include "mongo/db/query/optimizer/comparison_op.h"
 #include "mongo/db/query/optimizer/defs.h"
-#include "mongo/db/query/optimizer/index_bounds.h"
 #include "mongo/db/query/optimizer/node.h"  // IWYU pragma: keep
 #include "mongo/db/query/optimizer/syntax/expr.h"
 #include "mongo/db/query/optimizer/syntax/path.h"
@@ -85,47 +84,6 @@ static size_t computeDistributionHash(const DistributionRequirement& prop) {
     updateHash(resultHash, std::hash<DistributionType>()(distribAndProjections._type));
     updateHash(resultHash, computePropertyProjectionsHash(distribAndProjections._projectionNames));
     return resultHash;
-}
-
-static void updateBoundHash(size_t& result, const BoundRequirement& bound) {
-    updateHash(result, std::hash<bool>()(bound.isInclusive()));
-    updateHash(result, ABTHashGenerator::generate(bound.getBound()));
-};
-
-template <class T>
-class BoolExprHasher {
-public:
-    size_t transport(const typename T::Atom& node) {
-        // Dispatch to one of the computeHash functions below.
-        return ABTHashGenerator::generate(node.getExpr());
-    }
-
-    size_t transport(const typename T::Conjunction& node, const std::vector<size_t> childResults) {
-        size_t result = 31;
-        for (const size_t childResult : childResults) {
-            updateHash(result, childResult);
-        }
-        return result;
-    }
-
-    size_t transport(const typename T::Disjunction& node, const std::vector<size_t> childResults) {
-        size_t result = 29;
-        for (const size_t childResult : childResults) {
-            updateHash(result, childResult);
-        }
-        return result;
-    }
-
-    size_t compute(const typename T::Node& intervals) {
-        return algebra::transport<false>(intervals, *this);
-    }
-};
-
-size_t ABTHashGenerator::generate(const IntervalRequirement& req) {
-    size_t result = 17;
-    updateBoundHash(result, req.getLowBound());
-    updateBoundHash(result, req.getHighBound());
-    return 17;
 }
 
 /**

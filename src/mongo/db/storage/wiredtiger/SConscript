@@ -51,7 +51,7 @@ wtEnv.Library(
         "$BUILD_DIR/mongo/db/repl/repl_settings",
         "$BUILD_DIR/mongo/db/service_context",
         "$BUILD_DIR/mongo/db/storage/index_entry_comparison",
-        "$BUILD_DIR/mongo/db/storage/key_string",
+        "$BUILD_DIR/mongo/db/storage/key_string/key_string",
         "$BUILD_DIR/mongo/db/storage/record_store_base",
         "$BUILD_DIR/mongo/db/storage/recovery_unit_base",
         "$BUILD_DIR/mongo/db/storage/storage_file_util",
@@ -233,6 +233,7 @@ wtEnv.Benchmark(
         "wiredtiger_index_test_harness",
         "wiredtiger_record_store_test_harness",
     ],
+    CONSOLIDATED_TARGET="wt_storage_bm",
 )
 
 wtEnv.Benchmark(
@@ -247,4 +248,5 @@ wtEnv.Benchmark(
         "$BUILD_DIR/mongo/util/clock_source_mock",
         "storage_wiredtiger_core",
     ],
+    CONSOLIDATED_TARGET="wt_storage_bm",
 )

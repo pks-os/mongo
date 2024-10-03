@@ -12,7 +12,6 @@ env.Library(
     LIBDEPS=[
         "$BUILD_DIR/mongo/db/query/query_index_bounds",
         "$BUILD_DIR/mongo/db/query/stats/stats_histograms",
-        "ce_utils",
     ],
 )
 
@@ -70,6 +69,7 @@ env.Benchmark(
         "$BUILD_DIR/mongo/db/query/query_test_service_context",
         "ce_test_utils",
     ],
+    CONSOLIDATED_TARGET="second_half_bm",
 )
 
 env.Program(

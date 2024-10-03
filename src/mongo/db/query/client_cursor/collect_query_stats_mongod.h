@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2023-present MongoDB, Inc.
+ *    Copyright (C) 2024-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -27,58 +27,27 @@
  *    it in the license file.
  */
 
-
 #pragma once
 
-#include <vector>
+#include "mongo/db/query/client_cursor/clientcursor.h"
+#include "mongo/db/query/query_stats/key.h"
+#include "mongo/db/query/query_stats/supplemental_metrics_stats.h"
 
-#include "mongo/db/query/optimizer/bool_expression.h"
-#include "mongo/util/str.h"
-
-namespace mongo::optimizer {
+namespace mongo {
 
 /**
- * Prints a bool expr tree. Used for debugging.
+ * Records certain metrics for the current operation on OpDebug and aggregates those metrics for
+ * query stats use. If a cursor pin is provided, metrics are aggregated on the cursor; otherwise,
+ * metrics are written directly to the query stats store.
+ * NOTE: Metrics are taken from opDebug.additiveMetrics, so CurOp::setEndOfOpMetrics must be called
+ * *prior* to calling these.
+ *
+ * Currently, query stats are only collected for find, aggregate, count, and distinct requests (and
+ * their subsequent getMore requests), so these should only be called from those request paths.
  */
-template <class T>
-class BoolExprPrinter {
-public:
-    using BoolExprType = BoolExpr<T>;
+void collectQueryStatsMongod(OperationContext* opCtx, ClientCursorPin& cursor);
+void collectQueryStatsMongod(OperationContext* opCtx,
+                             const boost::intrusive_ptr<ExpressionContext>& expCtx,
+                             std::unique_ptr<query_stats::Key> key);
 
-    std::string transport(const typename BoolExprType::Atom& node) {
-        return str::stream() << node.getExpr();
-    }
-
-    std::string printChildren(const std::string& separator,
-                              const std::vector<std::string>& childResults) {
-        str::stream os;
-        os << "(";
-        bool first = true;
-        for (const std::string& child : childResults) {
-            if (first) {
-                first = false;
-            } else {
-                os << " " << separator << " ";
-            }
-            os << child;
-        }
-        os << ")";
-        return os;
-    }
-
-    std::string transport(const typename BoolExprType::Conjunction& node,
-                          std::vector<std::string> childResults) {
-        return printChildren("^", childResults);
-    }
-
-    std::string transport(const typename BoolExprType::Disjunction& node,
-                          std::vector<std::string> childResults) {
-        return printChildren("U", childResults);
-    }
-
-    std::string print(const typename BoolExprType::Node& n) {
-        return algebra::transport<false>(n, *this);
-    }
-};
-
-}  // namespace mongo::optimizer
+}  // namespace mongo
