@@ -100,6 +100,8 @@ selector:
     # retry indefinitely.
     - catches_command_failures
     - does_not_support_transactions
+    # Time-series collections do not support write transactions
+    - requires_timeseries
 
     # The following tags are excluded specifically for this suite.
     - config_shard_incompatible
@@ -124,12 +126,14 @@ executor:
           traceExceptions: false
           runningWithBalancer: true
           shardsAddedRemoved: true
+          useActionPermittedFile: [ContinuousAddRemoveShard]
           shardCollectionProbability: 0.5
           fsmPreOverridesLoadedCallback: import("jstests/libs/override_methods/implicitly_retry_on_migration_in_progress.js");
   hooks:
     - class: ContinuousAddRemoveShard
       transition_configsvr: true
       move_primary_comment: *movePrimaryComment
+      is_fsm_workload: true
     - class: CheckShardFilteringMetadata
     - class: CheckReplDBHashInBackground
     - class: CheckReplDBHash
@@ -164,7 +168,6 @@ executor:
         skipDroppingHashedShardKeyIndex: true
         reshardingMinimumOperationDurationMillis: 0
         balancerMigrationsThrottlingMs: 250
-        featureFlagReshardingForTimeseries: true
         failpoint.movePrimaryFailIfNeedToCloneMovableCollections:
           data:
             comment: *movePrimaryComment

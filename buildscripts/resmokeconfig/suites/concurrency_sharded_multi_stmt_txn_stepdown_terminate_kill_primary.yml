@@ -80,10 +80,6 @@ selector:
     - jstests/concurrency/fsm_workloads/ddl/collMod/collMod_separate_collections.js
     - jstests/concurrency/fsm_workloads/view_catalog/view_catalog.js
     - jstests/concurrency/fsm_workloads/view_catalog/view_catalog_cycle_with_drop.js
-    - jstests/concurrency/fsm_workloads/query/timeseries/timeseries_deletes_and_inserts.js
-    - jstests/concurrency/fsm_workloads/timeseries/timeseries_findAndModify_remove_and_inserts.js
-    - jstests/concurrency/fsm_workloads/timeseries/timeseries_updates_and_inserts.js
-    - jstests/concurrency/fsm_workloads/timeseries/timeseries_upserts.js
 
     ##
     # Denylists specific to this suite
@@ -131,6 +127,8 @@ selector:
     - does_not_support_transactions
     - does_not_support_stepdowns
     - assumes_unsharded_collection
+    # Time-series collections do not support write transactions
+    - requires_timeseries
 
   # Note that "requires_non_retryable_writes" does not need to be denylisted because some writes
   # that are not individually retryable can be retried if they are part of a transaction.
@@ -153,7 +151,7 @@ executor:
           runningWithShardStepdowns: true
           killShards: true
           traceExceptions: false
-          useActionPermittedFile: true
+          useActionPermittedFile: [ContinuousStepdown]
   hooks:
     # We use a stepdown interval of 15 seconds because we will retry all commands in a transaction
     # so we need to allow time for at most 10 operations to be re-run and then re-committed. If
@@ -163,7 +161,7 @@ executor:
       randomize_kill: true
       shard_stepdown: true
       stepdown_interval_ms: 15000
-      use_action_permitted_file: true
+      is_fsm_workload: true
     - class: CheckShardFilteringMetadata
     - class: CheckReplDBHash
     - class: CheckMetadataConsistencyInBackground
