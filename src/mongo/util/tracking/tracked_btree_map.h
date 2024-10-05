@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2022-present MongoDB, Inc.
+ *    Copyright (C) 2024-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -29,22 +29,24 @@
 
 #pragma once
 
-#include "mongo/base/string_data.h"
-#include "mongo/db/namespace_string.h"
-#include "mongo/db/s/metrics/field_names/sharding_data_transform_instance_metrics_field_name_provider.h"
-#include "mongo/util/duration.h"
+#include <absl/container/btree_map.h>
+#include <memory>
+#include <scoped_allocator>
+
+#include "mongo/util/tracking_allocator.h"
+#include "mongo/util/tracking_context.h"
 
 namespace mongo {
-namespace global_index {
 
-class GlobalIndexMetricsFieldNameProvider
-    : public ShardingDataTransformInstanceMetricsFieldNameProvider {
-public:
-    StringData getForDocumentsProcessed() const override;
-    StringData getForBytesWritten() const override;
-    StringData getForApproxDocumentsToProcess() const override;
-    StringData getForApproxBytesToScan() const override;
-};
+// TODO use std::scoped_allocator_adaptor. In v4 toolchain its copy-constructor is not nothrow which
+// is a requirement for the absl btree_map.
+template <class Key, class T, class Compare = std::less<Key>>
+using tracked_btree_map =
+    absl::btree_map<Key, T, Compare, TrackingAllocator<std::pair<const Key, T>>>;
 
-}  // namespace global_index
+template <class Key, class T, class Compare = std::less<Key>>
+tracked_btree_map<Key, T, Compare> make_tracked_btree_map(TrackingContext& trackingContext) {
+    return tracked_btree_map<Key, T, Compare>(trackingContext.makeAllocator<T>());
+}
+
 }  // namespace mongo
