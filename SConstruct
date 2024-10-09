@@ -143,6 +143,16 @@ add_option(
     site_scons/mongo/build_profiles.py to see each profile.""",
 )
 
+add_option(
+    "evergreen-tmp-dir",
+    help="Configures the path to the evergreen configured tmp directory.",
+    default=None,
+)
+# Preload to perform early fetch fo repositories
+tool = Tool("integrate_bazel")
+tool.exists(DefaultEnvironment())
+mongo_toolchain_execroot = DefaultEnvironment().PrefetchToolchain()
+
 build_profile = build_profiles.get_build_profile(get_option("build-profile"))
 
 add_option(
@@ -709,7 +719,7 @@ add_option(
 
 add_option(
     "toolchain-root",
-    default=None,
+    default=mongo_toolchain_execroot if mongo_toolchain_execroot else "",
     help="Name a toolchain root for use with toolchain selection Variables files in etc/scons",
 )
 
@@ -802,11 +812,6 @@ add_option(
     help="Bypass link-model=dynamic check for macos versions <12.",
 )
 
-add_option(
-    "evergreen-tmp-dir",
-    help="Configures the path to the evergreen configured tmp directory.",
-    default=None,
-)
 
 # --build-mongot is a compile flag used by the evergreen build variants that run end-to-end search
 # suites, as it downloads the necessary mongot binary.
@@ -1041,8 +1046,20 @@ env_vars.Add(
 )
 
 env_vars.Add(
+    "TOOLCHAIN_CCFLAGS",
+    help="Sets flags for the C and C++ compiler specific to the toolchain",
+    converter=variable_shlex_converter,
+)
+
+env_vars.Add(
     "NON_CONF_LINKFLAGS",
     help="Sets flags for the C and C++ linker that are not used in configure checks",
+    converter=variable_shlex_converter,
+)
+
+env_vars.Add(
+    "TOOLCHAIN_LINKFLAGS",
+    help="Sets flags for the C and C++ linker specific to the toolchain",
     converter=variable_shlex_converter,
 )
 
@@ -1720,7 +1737,15 @@ env = Environment(variables=env_vars, **envDict)
 del envDict
 env.AddMethod(lambda env, name, **kwargs: add_option(name, **kwargs), "AddOption")
 
-# Preload to perform early fetch fo repositories
+env.Prepend(CCFLAGS="$TOOLCHAIN_CCFLAGS")
+env.Prepend(LINKFLAGS="$TOOLCHAIN_LINKFLAGS")
+
+if not mongo_toolchain_execroot:
+    os.environ["CC"] = env.get("CC", os.environ.get("CC"))
+    os.environ["CXX"] = env.get("CXX", os.environ.get("CXX"))
+    os.environ["USE_NATIVE_TOOLCHAIN"] = "1"
+
+# Early load to setup env functions
 tool = Tool("integrate_bazel")
 tool.exists(env)
 

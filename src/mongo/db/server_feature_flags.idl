@@ -56,6 +56,12 @@ feature_flags:
         cpp_varname: gFeatureFlagRecordIdsReplicated
         default: false
         shouldBeFCVGated: true
+    featureFlagAuditConfigClusterParameter:
+        description: "Enable use of new auditConfig cluster server parameter"
+        cpp_varname: feature_flags::gFeatureFlagAuditConfigClusterParameter
+        default: true
+        version: 7.1
+        shouldBeFCVGated: true
     featureFlagStreams:
         description: "Enable support for streams"
         cpp_varname: gFeatureFlagStreams
@@ -77,12 +83,6 @@ feature_flags:
         description: "Feature flag to enable and autobootstrap sharding for all mongods"
         cpp_varname: gFeatureFlagAllMongodsAreSharded
         default: false
-        shouldBeFCVGated: true
-    featureFlagShardKeyIndexOptionalHashedSharding:
-        description: "Feature flag to make a supporting shard key index for hashed sharding optional"
-        cpp_varname: gFeatureFlagShardKeyIndexOptionalHashedSharding
-        default: true
-        version: 7.0
         shouldBeFCVGated: true
     featureFlagBanEncryptionOptionsInCollectionCreation:
         description: "Feature flag that bans encryption options from being used in createCollection

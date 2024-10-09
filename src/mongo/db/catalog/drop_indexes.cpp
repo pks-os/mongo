@@ -121,6 +121,17 @@ Status checkReplState(OperationContext* opCtx,
                                     << " with collection " << dbAndUUID.uuid());
     }
 
+    // Disallow index drops on drop-pending namespaces (system.drop.*) if we are primary.
+    auto isPrimary = replCoord->getSettings().isReplSet() && canAcceptWrites;
+    const auto& nss = collection->ns();
+    if (isPrimary && nss.isDropPendingNamespace()) {
+        return Status(ErrorCodes::NamespaceNotFound,
+                      str::stream() << "Cannot drop indexes on drop-pending namespace "
+                                    << nss.toStringForErrorMsg() << " in database "
+                                    << dbAndUUID.dbName().toStringForErrorMsg() << " with uuid "
+                                    << dbAndUUID.uuid());
+    }
+
     return Status::OK();
 }
 
@@ -335,18 +346,14 @@ void dropReadyIndexes(OperationContext* opCtx,
                     if (desc->isIdIndex()) {
                         return false;
                     }
-                    // For any index that is compatible with the shard key, if
-                    // gFeatureFlagShardKeyIndexOptionalHashedSharding is enabled and
-                    // the shard key is hashed, allow users to drop the hashed index. Note
-                    // skipDroppingHashedShardKeyIndex is used in some tests to prevent dropIndexes
-                    // from dropping the hashed shard key index so we can continue to test chunk
-                    // migration with hashed sharding. Otherwise, dropIndexes with '*' would drop
-                    // the index and prevent chunk migration from running.
+                    // Allow users to drop the hashed index for any index that is compatible with
+                    // the shard key. Note skipDroppingHashedShardKeyIndex is used in some tests to
+                    // prevent dropIndexes from dropping the hashed shard key index so we can
+                    // continue to test chunk migration with hashed sharding. Otherwise, dropIndexes
+                    // with '*' would drop the index and prevent chunk migration from running.
                     const auto& shardKey = collDescription.getShardKeyPattern();
-                    const bool skipDropIndex = skipDroppingHashedShardKeyIndex ||
-                        !(gFeatureFlagShardKeyIndexOptionalHashedSharding.isEnabled(
-                              serverGlobalParams.featureCompatibility.acquireFCVSnapshot()) &&
-                          shardKey.isHashedPattern());
+                    const bool skipDropIndex =
+                        skipDroppingHashedShardKeyIndex || !shardKey.isHashedPattern();
                     if (isCompatibleWithShardKey(opCtx,
                                                  CollectionPtr(collection),
                                                  desc->getEntry(),

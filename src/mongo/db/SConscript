@@ -122,19 +122,6 @@ env.Library(
     ],
 )
 
-env.Library(
-    target="change_stream_pre_image_test_helpers",
-    source=[
-        "change_stream_pre_image_test_helpers.cpp",
-    ],
-    LIBDEPS_PRIVATE=[
-        "change_stream_pre_image_util",
-        "change_stream_pre_images_collection_manager",
-        "server_base",
-        "shard_role",
-    ],
-)
-
 env.CppUnitTest(
     target="change_stream_pre_images_manager_test",
     source=[
@@ -482,7 +469,7 @@ env.Library(
         "$BUILD_DIR/mongo/db/modules/enterprise/src/audit/audit_configuration"
         if "audit" in env.get("MONGO_ENTERPRISE_FEATURES", [])
         else "",
-        "$BUILD_DIR/mongo/db/modules/enterprise/src/audit/audit_mongod"
+        "$BUILD_DIR/mongo/db/modules/enterprise/src/audit/audit_mongod_proxy"
         if "audit" in env.get("MONGO_ENTERPRISE_FEATURES", [])
         else "",
         "$BUILD_DIR/mongo/db/modules/enterprise/src/encryptdb/encryption_key_manager_aux"
@@ -725,6 +712,7 @@ env.Library(
         "query/client_cursor/client_cursor",
         "query/query_settings/manager",
         "query/stats/stats",
+        "repl/drop_pending_collection_reaper",
         "repl/initial_syncer",
         "repl/repl_coordinator_impl",
         "repl/replication_recovery",
@@ -1017,6 +1005,7 @@ if wiredtiger:
             "resource_yielder_test.cpp",
             "thread_client_test.cpp",
             "wire_version_test.cpp",
+            "service_context_test.cpp",
         ],
         LIBDEPS=[
             "$BUILD_DIR/mongo/transport/transport_layer_mock",
