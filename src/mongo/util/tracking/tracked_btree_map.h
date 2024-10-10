@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2022-present MongoDB, Inc.
+ *    Copyright (C) 2024-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -29,41 +29,24 @@
 
 #pragma once
 
-#include <cstdint>
+#include <absl/container/btree_map.h>
+#include <memory>
+#include <scoped_allocator>
 
-#include "mongo/bson/bsonobjbuilder.h"
-#include "mongo/db/service_context.h"
-#include "mongo/platform/atomic_word.h"
-#include "mongo/util/duration.h"
+#include "mongo/util/tracking_allocator.h"
+#include "mongo/util/tracking_context.h"
 
 namespace mongo {
 
-/**
- * Encapsulates per-process statistics for the shard split subsystem.
- */
-class ShardSplitStatistics {
-    ShardSplitStatistics(const ShardSplitStatistics&) = delete;
-    ShardSplitStatistics& operator=(const ShardSplitStatistics&) = delete;
+// TODO use std::scoped_allocator_adaptor. In v4 toolchain its copy-constructor is not nothrow which
+// is a requirement for the absl btree_map.
+template <class Key, class T, class Compare = std::less<Key>>
+using tracked_btree_map =
+    absl::btree_map<Key, T, Compare, TrackingAllocator<std::pair<const Key, T>>>;
 
-public:
-    ShardSplitStatistics() = default;
-    static ShardSplitStatistics* get(ServiceContext* service);
-
-    void incrementTotalCommitted(Milliseconds durationWithCatchup,
-                                 Milliseconds durationWithoutCatchup);
-    void incrementTotalAborted();
-
-    void appendInfoForServerStatus(BSONObjBuilder* builder) const;
-
-private:
-    // Total number of times shard splits successfully committed.
-    AtomicWord<std::int64_t> _totalCommitted{0};
-    // Total duration of successfully committed shard splits.
-    AtomicWord<std::int64_t> _totalCommittedDurationMillis{0};
-    // Total duration of successfully committed shard splits, excluding the block timestamp catchup.
-    AtomicWord<std::int64_t> _totalCommittedDurationWithoutCatchupMillis{0};
-    // Total number of times shard splits were aborted.
-    AtomicWord<std::int64_t> _totalAborted{0};
-};
+template <class Key, class T, class Compare = std::less<Key>>
+tracked_btree_map<Key, T, Compare> make_tracked_btree_map(TrackingContext& trackingContext) {
+    return tracked_btree_map<Key, T, Compare>(trackingContext.makeAllocator<T>());
+}
 
 }  // namespace mongo
