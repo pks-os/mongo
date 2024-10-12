@@ -229,6 +229,7 @@ BaseCloner::AfterStageBehavior CollectionCloner::CollectionClonerStage::run() {
 }
 
 BaseCloner::AfterStageBehavior CollectionCloner::collStatsStage() {
+    stdx::lock_guard<stdx::mutex> lk(_mutex);
     BSONObjBuilder b(BSON("collStats" << _sourceNss.coll().toString()));
 
     BSONObj res;

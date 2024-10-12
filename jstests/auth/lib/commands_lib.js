@@ -3052,93 +3052,6 @@ export const authCommandsLib = {
           ]
         },
         {
-          testname: "_shardsvrCreateGlobalIndex",
-          command: {_shardsvrCreateGlobalIndex: UUID()},
-          skipSharded: true,
-          testcases: [
-              {
-                runOnDb: adminDbName,
-                roles: {__system: 1},
-                privileges: [{resource: {cluster: true}, actions: ["internal"]}],
-                expectFail: true
-              },
-              {runOnDb: firstDbName, roles: {}},
-              {runOnDb: secondDbName, roles: {}}
-          ]
-        },
-        {
-          testname: "_shardsvrDropGlobalIndex",
-          command: {_shardsvrDropGlobalIndex: UUID()},
-          skipSharded: true,
-          testcases: [
-              {
-                runOnDb: adminDbName,
-                roles: {__system: 1},
-                privileges: [{resource: {cluster: true}, actions: ["internal"]}],
-                expectFail: true
-              },
-              {runOnDb: firstDbName, roles: {}},
-              {runOnDb: secondDbName, roles: {}}
-          ]
-        },
-        {
-          testname: "_shardsvrInsertGlobalIndexKey",
-          command: {_shardsvrInsertGlobalIndexKey: UUID(), key: {a: 1}, docKey: {shk: 1, _id: 1}},
-          skipSharded: true,
-          testcases: [
-              {
-                runOnDb: adminDbName,
-                roles: {__system: 1},
-                privileges: [{resource: {cluster: true}, actions: ["internal"]}],
-                expectFail: true
-              },
-              {runOnDb: firstDbName,
-                roles: {__system: 1},
-                privileges: [{resource: {cluster: true}, actions: ["internal"]}],
-                expectFail: true
-              },
-          ]
-        },
-        {
-          testname: "_shardsvrDeleteGlobalIndexKey",
-          command: {_shardsvrDeleteGlobalIndexKey: UUID(), key: {a: 1}, docKey: {shk: 1, _id: 1}},
-          skipSharded: true,
-          testcases: [
-              {
-                runOnDb: adminDbName,
-                roles: {__system: 1},
-                privileges: [{resource: {cluster: true}, actions: ["internal"]}],
-                expectFail: true
-              },
-              {runOnDb: firstDbName,
-                roles: {__system: 1},
-                privileges: [{resource: {cluster: true}, actions: ["internal"]}],
-                expectFail: true
-              },
-          ]
-        },
-        {
-          testname: "_shardsvrWriteGlobalIndexKeys",
-          command: {_shardsvrWriteGlobalIndexKeys: 1, ops: [
-            {_shardsvrInsertGlobalIndexKey: UUID(), key: {a: 1}, docKey: {shk: 1, _id: 1}},
-            {_shardsvrDeleteGlobalIndexKey: UUID(), key: {a: 1}, docKey: {shk: 1, _id: 1}},
-          ]},
-          skipSharded: true,
-          testcases: [
-              {
-                runOnDb: adminDbName,
-                roles: {__system: 1},
-                privileges: [{resource: {cluster: true}, actions: ["internal"]}],
-                expectFail: true
-              },
-              {runOnDb: firstDbName,
-                roles: {__system: 1},
-                privileges: [{resource: {cluster: true}, actions: ["internal"]}],
-                expectFail: true
-              },
-          ]
-        },
-        {
           testname: "commitTxn",
           command: {commitTransaction: 1},
           // TODO (SERVER-53497): Enable auth testing for abortTransaction and commitTransaction.
@@ -7444,8 +7357,73 @@ export const authCommandsLib = {
           },
         ]
       },
+      {
+        testname: "aggregate_$scoreFusion",
+        command: {
+            aggregate: "foo",
+            cursor: {},
+            pipeline: [{
+              $scoreFusion: {
+                inputs: [
+                  {
+                    pipeline: [
+                      {
+                        $match: {a: 1}
+                      },
+                      {
+                        $score: {
+                          score: 5.0
+                        }
+                      },
+                    ]
+                  },
+                  {
+                    pipeline: [
+                      {
+                        $search: {
+                          // empty query
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    pipeline: [
+                      {
+                        $vectorSearch: {
+                          // empty query
+                        }
+                      }
+                    ]
+                  }
+                ],
+                inputNormalization: "none"
+              }
+          }]
+        },
+        setup: function(db) {
+          db.createCollection("foo");
+        },
+        skipSharded: false,
+        disableSearch: true,
+        skipTest: (conn) => {
+          return !TestData.setParameters.featureFlagSearchHybridScoring;
+        },
+        testcases: [
+          {
+            runOnDb: firstDbName,
+            roles: roles_read,
+            privileges: [{resource: {db: firstDbName, collection: "foo"}, actions: ["find"]}]
+          },
+          {
+            runOnDb: secondDbName,
+            roles: roles_readAny,
+            privileges:
+                [{resource: {db: secondDbName, collection: "foo"}, actions: ["find"]}]
+          },
+        ]
+      }, 
     ],
-
+    
     /************* SHARED TEST LOGIC ****************/
 
     /**
