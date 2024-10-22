@@ -151,7 +151,8 @@ BSONObj parseSortPattern(OperationContext* opCtx,
         collator = uassertStatusOK(CollatorFactoryInterface::get(opCtx->getServiceContext())
                                        ->makeFromBSON(parsedInfo.collation));
     }
-    auto expCtx = make_intrusive<ExpressionContext>(opCtx, std::move(collator), nss);
+    auto expCtx =
+        ExpressionContextBuilder{}.opCtx(opCtx).collator(std::move(collator)).ns(nss).build();
     auto sortPattern = SortPattern(parsedInfo.sort.value_or(BSONObj()), expCtx);
     return sortPattern.serialize(SortPattern::SortKeySerialization::kForSortKeyMerging).toBson();
 }
@@ -224,7 +225,7 @@ BSONObj createAggregateCmdObj(
 
     aggregate.setCollation(parsedInfo.collation);
     aggregate.setIsClusterQueryWithoutShardKeyCmd(true);
-    aggregate.setFromMongos(true);
+    aggregation_request_helper::setFromRouter(aggregate, true);
 
     if (parsedInfo.sort) {
         aggregate.setNeedsMerge(true);

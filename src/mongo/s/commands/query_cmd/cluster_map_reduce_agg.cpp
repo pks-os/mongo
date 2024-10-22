@@ -122,7 +122,7 @@ auto makeExpressionContext(OperationContext* opCtx,
     }
 
     // Resolve involved namespaces.
-    StringMap<ExpressionContext::ResolvedNamespace> resolvedNamespaces;
+    StringMap<ResolvedNamespace> resolvedNamespaces;
     resolvedNamespaces.try_emplace(nss.coll(), nss, std::vector<BSONObj>{});
     if (parsedMr.getOutOptions().getOutputType() != OutputType::InMemory) {
         auto outNss = parsedMr.getOutOptions().getDatabaseName()
@@ -139,25 +139,21 @@ auto makeExpressionContext(OperationContext* opCtx,
         runtimeConstants.setJsScope(parsedMr.getScope()->getObj());
     }
     runtimeConstants.setIsMapReduce(true);
-    auto expCtx = make_intrusive<ExpressionContext>(
-        opCtx,
-        verbosity,
-        false,  // fromRouter
-        false,  // needsMerge
-        true,   // allowDiskUse
-        parsedMr.getBypassDocumentValidation().get_value_or(false),
-        true,  // isMapReduceCommand
-        nss,
-        runtimeConstants,
-        std::move(resolvedCollator),
-        std::make_shared<MongosProcessInterface>(
-            Grid::get(opCtx)->getExecutorPool()->getArbitraryExecutor()),
-        std::move(resolvedNamespaces),
-        boost::none,  // uuid
-        boost::none,
-        false  // mayDbProfile: false because mongos has no profile collection.
-    );
-    expCtx->inRouter = true;
+    auto expCtx =
+        ExpressionContextBuilder{}
+            .opCtx(opCtx)
+            .collator(std::move(resolvedCollator))
+            .mongoProcessInterface(std::make_shared<MongosProcessInterface>(
+                Grid::get(opCtx)->getExecutorPool()->getArbitraryExecutor()))
+            .ns(nss)
+            .resolvedNamespace(std::move(resolvedNamespaces))
+            .allowDiskUse(true)
+            .bypassDocumentValidation(parsedMr.getBypassDocumentValidation().get_value_or(false))
+            .isMapReduceCommand(true)
+            .explain(verbosity)
+            .runtimeConstants(runtimeConstants)
+            .inRouter(true)
+            .build();
     if (!cm.hasRoutingTable() && collationObj.isEmpty()) {
         expCtx->setIgnoreCollator();
     }
@@ -172,7 +168,7 @@ Document serializeToCommand(const MapReduceCommandRequest& parsedMr, Pipeline* p
     translatedCmd[AggregateCommandRequest::kCursorFieldName] =
         Value(Document{{"batchSize", std::numeric_limits<long long>::max()}});
     translatedCmd[AggregateCommandRequest::kAllowDiskUseFieldName] = Value(true);
-    translatedCmd[AggregateCommandRequest::kFromMongosFieldName] = Value(true);
+    aggregation_request_helper::setFromRouter(translatedCmd, Value(true));
     translatedCmd[AggregateCommandRequest::kLetFieldName] = Value(
         pipeline->getContext()->variablesParseState.serialize(pipeline->getContext()->variables));
     translatedCmd[AggregateCommandRequest::kIsMapReduceCommandFieldName] = Value(true);

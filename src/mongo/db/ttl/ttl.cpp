@@ -573,7 +573,7 @@ bool TTLMonitor::_doTTLIndexDelete(OperationContext* opCtx,
         return false;
     }
 
-    if (nss->isTemporaryReshardingCollection() || nss->isDropPendingNamespace()) {
+    if (nss->isTemporaryReshardingCollection()) {
         // For resharding, the donor shard primary is responsible for performing the TTL
         // deletions.
         return false;
@@ -747,9 +747,9 @@ bool TTLMonitor::_deleteExpiredWithIndex(OperationContext* opCtx,
     BSONObj query = BSON(keyFieldName << BSON("$gte" << kDawnOfTime << "$lte" << expirationDate));
     auto findCommand = std::make_unique<FindCommandRequest>(collection.nss());
     findCommand->setFilter(query);
-    auto canonicalQuery = std::make_unique<CanonicalQuery>(
-        CanonicalQueryParams{.expCtx = makeExpressionContext(opCtx, *findCommand),
-                             .parsedFind = ParsedFindCommandParams{std::move(findCommand)}});
+    auto canonicalQuery = std::make_unique<CanonicalQuery>(CanonicalQueryParams{
+        .expCtx = ExpressionContextBuilder{}.fromRequest(opCtx, *findCommand).build(),
+        .parsedFind = ParsedFindCommandParams{std::move(findCommand)}});
 
     auto params = std::make_unique<DeleteStageParams>();
     params->isMulti = true;
@@ -913,7 +913,7 @@ void TTLMonitor::onStepUp() {
                 continue;
             }
 
-            if (nss->isTemporaryReshardingCollection() || nss->isDropPendingNamespace()) {
+            if (nss->isTemporaryReshardingCollection()) {
                 continue;
             }
 

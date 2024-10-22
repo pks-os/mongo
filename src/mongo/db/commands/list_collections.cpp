@@ -244,22 +244,12 @@ BSONObj buildTimeseriesBson(OperationContext* opCtx, StringData collName, bool n
 /**
  * Return an object describing the collection. Takes a collection lock if nameOnly is false.
  */
-BSONObj buildCollectionBson(OperationContext* opCtx,
-                            const Collection* collection,
-                            bool includePendingDrops,
-                            bool nameOnly) {
+BSONObj buildCollectionBson(OperationContext* opCtx, const Collection* collection, bool nameOnly) {
     if (!collection) {
         return {};
     }
     auto nss = collection->ns();
     auto collectionName = nss.coll();
-
-    // Drop-pending collections are replicated collections that have been marked for deletion.
-    // These collections are considered dropped and should not be returned in the results for this
-    // command, unless specified explicitly by the 'includePendingDrops' command argument.
-    if (nss.isDropPendingNamespace() && !includePendingDrops) {
-        return {};
-    }
 
     BSONObjBuilder b;
     b.append("name", collectionName);
@@ -362,17 +352,12 @@ public:
                 SerializationContext::stateCommandReply(listCollRequest.getSerializationContext());
 
             // The collator is null because collection objects are compared using binary comparison.
-            auto expCtx = make_intrusive<ExpressionContext>(
-                opCtx, std::unique_ptr<CollatorInterface>(nullptr), ns());
+            auto expCtx = ExpressionContextBuilder{}.opCtx(opCtx).ns(ns()).build();
 
             if (listCollRequest.getFilter()) {
                 matcher = uassertStatusOK(
                     MatchExpressionParser::parse(*listCollRequest.getFilter(), expCtx));
             }
-
-            // Check for 'includePendingDrops' flag. The default is to not include drop-pending
-            // collections.
-            bool includePendingDrops = listCollRequest.getIncludePendingDrops().value_or(false);
 
             const NamespaceString cursorNss = NamespaceString::makeListCollectionsNSS(dbName);
             std::unique_ptr<PlanExecutor, PlanExecutor::Deleter> exec;
@@ -415,8 +400,7 @@ public:
                                 const Collection* collection =
                                     catalog->establishConsistentCollection(opCtx, nss, boost::none);
                                 if (collection != nullptr) {
-                                    return buildCollectionBson(
-                                        opCtx, collection, includePendingDrops, nameOnly);
+                                    return buildCollectionBson(opCtx, collection, nameOnly);
                                 }
 
                                 std::shared_ptr<const ViewDefinition> view =
@@ -444,8 +428,7 @@ public:
                         }
                     } else {
                         auto perCollectionWork = [&](const Collection* collection) {
-                            if (collection->getTimeseriesOptions() &&
-                                !collection->ns().isDropPendingNamespace()) {
+                            if (collection->getTimeseriesOptions()) {
                                 auto viewNss = collection->ns().getTimeseriesViewNamespace();
                                 auto view =
                                     catalog->lookupViewWithoutValidatingDurable(opCtx, viewNss);
@@ -470,8 +453,7 @@ public:
                                 return true;
                             }
 
-                            BSONObj collBson = buildCollectionBson(
-                                opCtx, collection, includePendingDrops, nameOnly);
+                            BSONObj collBson = buildCollectionBson(opCtx, collection, nameOnly);
                             if (!collBson.isEmpty()) {
                                 _addWorkingSetMember(
                                     opCtx, collBson, matcher.get(), ws.get(), results);

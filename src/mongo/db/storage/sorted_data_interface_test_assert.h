@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2022-present MongoDB, Inc.
+ *    Copyright (C) 2024-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -29,13 +29,26 @@
 
 #pragma once
 
-#include <functional>
+#include <variant>
 
-namespace mongo::optimizer {
+#include "mongo/base/status.h"
+#include "mongo/db/storage/sorted_data_interface.h"
+#include "mongo/unittest/assert.h"
+#include "mongo/unittest/bson_test_util.h"
 
-/**
- * Used to provide a ABT constant folding mechanism. The input ABT is constant folded in-place.
- */
-using ConstFoldFn = std::function<void(ABT& expr)>;
+#define ASSERT_SDI_INSERT_OK(EXPR)                  \
+    {                                               \
+        auto result = EXPR;                         \
+        auto status = std::get_if<Status>(&result); \
+        ASSERT(status);                             \
+        ASSERT_OK(*status);                         \
+    }
 
-}  // namespace mongo::optimizer
+#define ASSERT_SDI_INSERT_DUPLICATE_KEY(EXPR, KEY, ID)                            \
+    {                                                                             \
+        auto result = EXPR;                                                       \
+        auto duplicate = std::get_if<SortedDataInterface::DuplicateKey>(&result); \
+        ASSERT(duplicate);                                                        \
+        ASSERT_BSONOBJ_EQ(duplicate->key, KEY);                                   \
+        ASSERT_EQ(duplicate->id, ID);                                             \
+    }
