@@ -15,7 +15,7 @@ var st = new ShardingTest({shards: 1});
 
 var replTest = new ReplSetTest({nodes: 3});
 replTest.startSet({shardsvr: ''});
-replTest.initiate();
+replTest.initiate(null, null, {initiateWithDefaultElectionTimeout: true});
 
 // The default WC is majority and stopServerReplication will prevent satisfying any majority writes.
 assert.commandWorked(st.s.adminCommand(
@@ -92,7 +92,7 @@ jsTest.log("Waiting for original primary to rollback and shut down");
 // Wait until the node shuts itself down during the rollback. We will hit the first assertion if
 // we rollback using 'recoverToStableTimestamp'.
 assert.soon(() => {
-    return (rawMongoProgramOutput().search(/Fatal assertion.*(40498|50712)/) !== -1);
+    return (rawMongoProgramOutput(".*").search(/Fatal assertion.*(40498|50712)/) !== -1);
 });
 
 // Restart the original primary again.  This time, the shardIdentity document should already be

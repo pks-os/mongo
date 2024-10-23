@@ -1064,9 +1064,8 @@ export class ReplSetTest {
      * Ensures that a primary is elected (not necessarily node 0).
      * initiate() should be preferred instead of this, but this is useful when the connections
      * aren't authorized to run replSetGetStatus.
-     * TODO(SERVER-14017): remove this in favor of using initiate() everywhere.
      */
-    initiateWithAnyNodeAsPrimary(cfg, initCmd, {
+    _initiateWithAnyNodeAsPrimary(cfg, initCmd, {
         doNotWaitForStableRecoveryTimestamp: doNotWaitForStableRecoveryTimestamp = false,
         doNotWaitForReplication: doNotWaitForReplication = false,
         doNotWaitForNewlyAddedRemovals: doNotWaitForNewlyAddedRemovals = false,
@@ -1211,15 +1210,6 @@ export class ReplSetTest {
             (lastContinuousBinVersionWasSpecifiedForSomeNode ||
              jsTest.options().useRandomBinVersionsWithinReplicaSet == 'last-continuous') &&
             !this.isConfigServer;
-
-        if ((setLastLTSFCV || setLastContinuousFCV) &&
-            jsTest.options().replSetFeatureCompatibilityVersion) {
-            const fcv = setLastLTSFCV ? lastLTSFCV : lastContinuousFCV;
-            throw new Error(
-                "The FCV will be set to '" + fcv + "' automatically when starting up a replica " +
-                "set with mixed binary versions. Therefore, we expect an empty value for " +
-                "'replSetFeatureCompatibilityVersion'.");
-        }
 
         if (setLastLTSFCV || setLastContinuousFCV) {
             // Authenticate before running the command.
@@ -1392,22 +1382,6 @@ export class ReplSetTest {
                   "that the highest priority node is primary");
         }
 
-        // Set 'featureCompatibilityVersion' for the entire replica set, if specified.
-        if (jsTest.options().replSetFeatureCompatibilityVersion) {
-            // Authenticate before running the command.
-            asCluster(this, this.nodes, () => {
-                let fcv = jsTest.options().replSetFeatureCompatibilityVersion;
-                print("Setting feature compatibility version for replica set to '" + fcv + "'");
-                assert.commandWorked(this.getPrimary().adminCommand(
-                    {setFeatureCompatibilityVersion: fcv, confirm: true}));
-
-                // Wait for the new 'featureCompatibilityVersion' to propagate to all nodes in the
-                // replica set. The 'setFeatureCompatibilityVersion' command only waits for
-                // replication to a majority of nodes by default.
-                this.awaitReplication();
-            });
-        }
-
         // We need to disable the enableDefaultWriteConcernUpdatesForInitiate parameter
         // to disallow updating the default write concern after initiating is complete.
         asCluster(this, this.nodes, () => {
@@ -1492,11 +1466,26 @@ export class ReplSetTest {
      * This version should be prefered where possible but requires all connections in the
      * ReplSetTest to be authorized to run replSetGetStatus.
      */
-    initiateWithNodeZeroAsPrimary(cfg, initCmd, {
+    _initiateWithNodeZeroAsPrimary(cfg, initCmd, {
+        doNotWaitForStableRecoveryTimestamp: doNotWaitForStableRecoveryTimestamp = false,
+        doNotWaitForReplication: doNotWaitForReplication = false,
+        doNotWaitForNewlyAddedRemovals: doNotWaitForNewlyAddedRemovals = false,
         doNotWaitForPrimaryOnlyServices: doNotWaitForPrimaryOnlyServices = false,
+        allNodesAuthorizedToRunRSGetStatus: allNodesAuthorizedToRunRSGetStatus = true
     } = {}) {
         let startTime = new Date();  // Measure the execution time of this function.
-        this.initiateWithAnyNodeAsPrimary(cfg, initCmd, {doNotWaitForPrimaryOnlyServices: true});
+        this._initiateWithAnyNodeAsPrimary(cfg, initCmd, {
+            doNotWaitForStableRecoveryTimestamp: doNotWaitForStableRecoveryTimestamp,
+            doNotWaitForReplication: doNotWaitForReplication,
+            doNotWaitForNewlyAddedRemovals: doNotWaitForNewlyAddedRemovals,
+            doNotWaitForPrimaryOnlyServices: doNotWaitForPrimaryOnlyServices
+        });
+
+        // stepUp() calls awaitReplication() which requires all nodes to be authorized to run
+        // replSetGetStatus.
+        if (!allNodesAuthorizedToRunRSGetStatus) {
+            return;
+        }
 
         // Most of the time node 0 will already be primary so we can skip the step-up.
         let primary = this.getPrimary();
@@ -1509,8 +1498,6 @@ export class ReplSetTest {
                 }
             });
         } else {
-            // stepUp() calls awaitReplication() which requires all nodes to be authorized to run
-            // replSetGetStatus.
             asCluster(this, this.nodes, () => {
                 const newPrimary = this.nodes[0];
                 this.stepUp(newPrimary,
@@ -1525,26 +1512,39 @@ export class ReplSetTest {
               "ms for " + this.nodes.length + " nodes.");
     }
 
-    /**
-     * Runs replSetInitiate on the replica set and requests the first node to step up as
-     * primary.
-     */
-    initiate(cfg, initCmd, {
-        doNotWaitForPrimaryOnlyServices: doNotWaitForPrimaryOnlyServices = false,
-    } = {}) {
-        this.initiateWithNodeZeroAsPrimary(
-            cfg, initCmd, {doNotWaitForPrimaryOnlyServices: doNotWaitForPrimaryOnlyServices});
+    _addHighElectionTimeoutIfNotSet(config) {
+        config = config || this.getReplSetConfig();
+        config.settings = config.settings || {};
+        config.settings["electionTimeoutMillis"] =
+            config.settings["electionTimeoutMillis"] || ReplSetTest.kForeverMillis;
+        return config;
     }
 
     /**
-     * Modifies the election timeout to be 24 hours so that no unplanned elections happen. Then
-     * runs replSetInitiate on the replica set with the new config.
+     * Initializes the replica set with `replSetInitiate`, setting a high election timeout unless
+     * 'initiateWithDefaultElectionTimeout' is true. It requests the first node to step up as
+     * primary. However, if 'allNodesAuthorizedToRunRSGetStatus' is set to false, any node can
+     * become the primary.
      */
-    initiateWithHighElectionTimeout(config) {
-        config = config || this.getReplSetConfig();
-        config.settings = config.settings || {};
-        config.settings["electionTimeoutMillis"] = ReplSetTest.kForeverMillis;
-        this.initiate(config);
+    initiate(cfg, initCmd, {
+        doNotWaitForStableRecoveryTimestamp: doNotWaitForStableRecoveryTimestamp = false,
+        doNotWaitForReplication: doNotWaitForReplication = false,
+        doNotWaitForNewlyAddedRemovals: doNotWaitForNewlyAddedRemovals = false,
+        doNotWaitForPrimaryOnlyServices: doNotWaitForPrimaryOnlyServices = false,
+        initiateWithDefaultElectionTimeout: initiateWithDefaultElectionTimeout = false,
+        allNodesAuthorizedToRunRSGetStatus: allNodesAuthorizedToRunRSGetStatus = true,
+    } = {}) {
+        if (!initiateWithDefaultElectionTimeout) {
+            cfg = this._addHighElectionTimeoutIfNotSet(cfg);
+        }
+
+        return this._initiateWithNodeZeroAsPrimary(cfg, initCmd, {
+            doNotWaitForStableRecoveryTimestamp: doNotWaitForStableRecoveryTimestamp,
+            doNotWaitForReplication: doNotWaitForReplication,
+            doNotWaitForNewlyAddedRemovals: doNotWaitForNewlyAddedRemovals,
+            doNotWaitForPrimaryOnlyServices: doNotWaitForPrimaryOnlyServices,
+            allNodesAuthorizedToRunRSGetStatus: allNodesAuthorizedToRunRSGetStatus
+        });
     }
 
     /**

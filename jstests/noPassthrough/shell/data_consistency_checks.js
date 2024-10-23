@@ -16,6 +16,10 @@ import {ShardingTest} from "jstests/libs/shardingtest.js";
 TestData.skipCollectionAndIndexValidation = true;
 TestData.skipCheckDBHashes = true;
 
+function regexForValidateAndDBHashSlowQuery() {
+    return String('Slow query.*"command":\\{"(validate|db[Hh]ash)');
+}
+
 function makePatternForDBHash(dbName) {
     return new RegExp(
         `Slow query.*"ns":"${dbName}\\.\\$cmd".*"appName":"MongoDB Shell","command":{"db[Hh]ash`,
@@ -55,7 +59,7 @@ function runDataConsistencyChecks(testCase) {
     // will return all of their output.
     testCase.teardown();
 
-    return rawMongoProgramOutput();
+    return rawMongoProgramOutput(regexForValidateAndDBHashSlowQuery());
 }
 
 (function testReplicaSetWithVotingSecondaries() {
@@ -67,7 +71,7 @@ function runDataConsistencyChecks(testCase) {
         }
     });
     rst.startSet();
-    rst.initiateWithNodeZeroAsPrimary();
+    rst.initiate();
 
     // Insert a document so the "dbhash" and "validate" commands have some actual work to do.
     assert.commandWorked(rst.nodes[0].getDB("test").mycoll.insert({}));

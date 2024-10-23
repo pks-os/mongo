@@ -24,7 +24,7 @@ function runTest(op, result) {
     jsTestLog(`Testing "${op}" oplog application during recovery that finishes with "${result}".`);
     const rst = new ReplSetTest({nodes: 1});
     rst.startSet();
-    rst.initiateWithHighElectionTimeout();
+    rst.initiate();
     let conn = rst.getPrimary();
 
     // Construct a valid oplog entry.
@@ -108,7 +108,7 @@ function runTest(op, result) {
         assert.eq(exitCode, MongoRunner.EXIT_ABORT);
         assert.soon(
             function() {
-                return rawMongoProgramOutput().search(/Fatal assertion.*5415000/) >= 0;
+                return rawMongoProgramOutput("Fatal assertion").search(/5415000/) >= 0;
             },
             "Node should have fasserted upon encountering a fatal error during startup",
             ReplSetTest.kDefaultTimeoutMS);

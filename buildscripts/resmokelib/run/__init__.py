@@ -1080,7 +1080,7 @@ class RunPlugin(PluginInterface):
         RunPlugin._add_list_tags(subparsers)
         RunPlugin._add_generate_multiversion_exclude_tags(subparsers)
 
-    def parse(self, subcommand, parser, parsed_args, **kwargs):
+    def parse(self, subcommand, parser, parsed_args, should_configure_otel=True, **kwargs):
         """
         Return Run Subcommand if command is one we recognize.
 
@@ -1098,10 +1098,15 @@ class RunPlugin(PluginInterface):
             "generate-multiversion-exclude-tags",
             "generate-matrix-suites",
         ):
-            configure_resmoke.validate_and_update_config(parser, parsed_args)
             if config.EVERGREEN_TASK_ID is not None:
+                configure_resmoke.validate_and_update_config(
+                    parser, parsed_args, should_configure_otel
+                )
                 return TestRunnerEvg(subcommand, **kwargs)
             else:
+                configure_resmoke.validate_and_update_config(
+                    parser, parsed_args, should_configure_otel
+                )
                 return TestRunner(subcommand, **kwargs)
         return None
 
@@ -1207,6 +1212,16 @@ class RunPlugin(PluginInterface):
             help=(
                 "Allows running tests in a suite config's excluded test roots"
                 " when passed as positional arg(s)."
+            ),
+        )
+
+        parser.add_argument(
+            "--skipTestsCoveredByMoreComplexSuites",
+            dest="skip_tests_covered_by_more_complex_suites",
+            action="store_true",
+            help=(
+                "Excludes tests from running on some suite_A if a more complex"
+                " suite_A_B will also run the same tests."
             ),
         )
 

@@ -36,7 +36,7 @@ const replSet = new ReplSetTest({
     }
 });
 replSet.startSet();
-replSet.initiateWithHighElectionTimeout();
+replSet.initiate();
 
 const primary = replSet.getPrimary();
 const secondary = replSet.getSecondary();
@@ -364,7 +364,7 @@ function allIndexKeysNotFoundDuringReverseLookup(nDocs, docSuffix, collOpts) {
     checkHealthLog(secondaryHealthLog, logQueries.allErrorsOrWarningsQuery, 0);
 
     if (debugBuild) {
-        assert(rawMongoProgramOutput().match(/7844803.*could not find any keys in index/),
+        assert(rawMongoProgramOutput("could not find any keys in index").match(/7844803/),
                "expected 'could not find any keys in index' log");
     }
 }

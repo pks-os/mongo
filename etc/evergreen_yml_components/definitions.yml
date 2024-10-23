@@ -1223,16 +1223,6 @@ functions:
     - *check_run_tests_infrastructure_failure
     - *check_resmoke_failure
 
-  "scons lint":
-    - *f_expansions_write
-    - command: subprocess.exec
-      display_name: "scons lint sh"
-      type: test
-      params:
-        binary: bash
-        args:
-          - "src/evergreen/scons_lint.sh"
-
   "scons splunk": &scons_splunk
     command: subprocess.exec
     display_name: "scons splunk"
@@ -2787,11 +2777,26 @@ functions:
     params:
       binary: bash
       args:
-        - "./src/evergreen/functions/code_coverage_data_process.sh"
+        - "src/evergreen/run_python_script.sh"
+        - "evergreen/functions/code_coverage_data_process.py"
+
+  "upload code coverage report": &upload_code_coverage_report
+    command: s3.put
+    params:
+      optional: true
+      aws_key: ${aws_key}
+      aws_secret: ${aws_secret}
+      local_file: src/gcovr-coveralls.txt
+      remote_file: ${project}/${build_variant}/${revision}/gcovr-coveralls-${task_id}-${execution}.txt
+      bucket: mciuploads
+      permissions: public-read
+      content_type: text/plain
+      display_name: Code Coverage Summary
 
   "save code coverage data":
     - *f_expansions_write
     - *process_code_coverage_data
+    - *upload_code_coverage_report
 
   "do scons setup":
     - command: manifest.load

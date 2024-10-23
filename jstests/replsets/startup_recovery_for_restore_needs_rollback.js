@@ -29,7 +29,7 @@ const startParams = {
 };
 const nodes = rst.startSet({setParameter: startParams});
 let restoreNode = nodes[1];
-rst.initiateWithHighElectionTimeout();
+rst.initiate();
 const primary = rst.getPrimary();
 const db = primary.getDB(dbName);
 const collName = "testcoll";
@@ -150,7 +150,8 @@ assert.commandWorked(restoreNode.adminCommand(
     {'configureFailPoint': 'hangBeforeUnrecoverableRollbackError', 'mode': 'off'}));
 
 // This node should not come back up, because it has no stable timestamp to recover to.
-assert.soon(() => (rawMongoProgramOutput().search("UnrecoverableRollbackError") >= 0));
+const subStr = "UnrecoverableRollbackError";
+assert.soon(() => (rawMongoProgramOutput(subStr).search(subStr) >= 0));
 // Hide the exit code from stopSet.
 waitMongoProgram(parseInt(restoreNode.port));
 
