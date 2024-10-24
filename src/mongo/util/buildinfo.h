@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2022-present MongoDB, Inc.
+ *    Copyright (C) 2024-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -29,21 +29,19 @@
 
 #pragma once
 
-#include "mongo/bson/bsonobj.h"
+#include "mongo/util/buildinfo_gen.h"
 
-
-namespace mongo::optimizer {
+namespace mongo {
 
 /**
- * Used to abstract away the explaining of the optimizer.
- * Note: we should not depend on anything here (certainly not the rest of the optimizer).
+ * Populate standard buildInfo content.
+ * Note that this does not include the 'storageEngines' field which is specific to Shard roles.
  */
-class AbstractABTPrinter {
-public:
-    virtual ~AbstractABTPrinter() = default;
-    virtual BSONObj explainBSON() const = 0;
-    virtual std::string getPlanSummary() const = 0;
-    virtual BSONObj getQueryParameters() const = 0;
-};
+BuildInfo getBuildInfo();
 
-};  // namespace mongo::optimizer
+/**
+ * Populate just the 'version' and 'versionArray' fields of buildInfo content.
+ */
+BuildInfo getBuildInfoVersionOnly();
+
+}  // namespace mongo

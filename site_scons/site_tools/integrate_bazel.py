@@ -404,14 +404,14 @@ def bazel_build_thread_func(env, log_dir: str, verbose: bool, ninja_generate: bo
         extra_args += ["--build_tag_filters=scons_link_lists"]
 
     bazel_cmd = Globals.bazel_base_build_command + extra_args + ["//src/..."]
+
     if ninja_generate:
         print("Generating bazel link deps...")
     else:
         print(f"Bazel build command:\n{' '.join(bazel_cmd)}")
+
     if env.GetOption("coverity-build"):
-        print(
-            "--coverity-build selected, assuming bazel targets were built in a previous coverity run. Not running bazel build."
-        )
+        print(f"BAZEL_COMMAND: {' '.join(bazel_cmd)}")
         return
 
     print("Starting bazel build thread...")
@@ -1047,7 +1047,7 @@ def generate(env: SCons.Environment.Environment) -> None:
 
     if normalized_arch not in ["arm64", "amd64"]:
         bazel_internal_flags.append("--config=local")
-        bazel_internal_flags.append("--jobs=4")
+        bazel_internal_flags.append("--jobs=3")
     elif os.environ.get("USE_NATIVE_TOOLCHAIN"):
         print("Custom toolchain detected, using --config=local for bazel build.")
         bazel_internal_flags.append("--config=local")

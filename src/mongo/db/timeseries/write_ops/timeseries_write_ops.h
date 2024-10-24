@@ -29,54 +29,32 @@
 
 #pragma once
 
-#include <functional>
-#include <vector>
+#include "mongo/db/curop.h"
+#include "mongo/db/namespace_string.h"
+#include "mongo/db/operation_context.h"
+#include "mongo/db/query/write_ops/write_ops_gen.h"
 
-// Must be a named namespace so the functions we want to unwind through have external linkage.
-// Without that, the compiler optimizes them away.
-namespace mongo::stacktrace_test {
+namespace mongo::timeseries::write_ops {
 
-struct Context {
-    // Trickery with std::vector<std::function> is to hide from the optimizer.
-    std::vector<std::function<void(Context&)>> plan;
-    std::function<void()> callback;
-};
-
-template <int N>
-void callNext(Context& ctx) {
-    if constexpr (N == 0) {
-        ctx.callback();
-    } else {
-        ctx.plan[N - 1](ctx);
-    }
-
-#ifndef _WIN32
-    // MSVC doesn't support inline assembly on many architectures including x86-64 and aarch64.
-    // So we can't reliably prevent tail call optimization.
-    asm volatile("");  // NOLINT
-#endif                 // _WIN32
-}
-
-template <int N>
-Context makeContext() {
-    if constexpr (N >= 0) {
-        Context ctx = makeContext<N - 1>();
-        ctx.plan.emplace_back(callNext<N>);
-        return ctx;
-    }
-    return {};
-}
+void assertTimeseriesBucketsCollectionNotFound(const NamespaceString& ns);
 
 /**
- * Runs the given callback beneath a callstack that contains N frames worth of calls to
- * `stacktrace_test::callNext`, even in the presence of compiler optimizations that could
- * normally optimize away such calls (at least on non-Windows platforms).
+ * Returns an InsertCommandReply if the timeseries writes succeeded.
  */
-template <int N>
-void executeUnderCallstack(std::function<void()> callback) {
-    auto ctx = stacktrace_test::makeContext<N - 1>();
-    ctx.callback = std::move(callback);
-    ctx.plan.back()(ctx);
-}
+mongo::write_ops::InsertCommandReply performTimeseriesWrites(
+    OperationContext* opCtx, const mongo::write_ops::InsertCommandRequest& request);
 
-}  // namespace mongo::stacktrace_test
+mongo::write_ops::InsertCommandReply performTimeseriesWrites(
+    OperationContext* opCtx, const mongo::write_ops::InsertCommandRequest& request, CurOp* curOp);
+
+
+namespace details {
+
+Status performAtomicTimeseriesWrites(
+    OperationContext* opCtx,
+    const std::vector<mongo::write_ops::InsertCommandRequest>& insertOps,
+    const std::vector<mongo::write_ops::UpdateCommandRequest>& updateOps);
+
+}  // namespace details
+
+}  // namespace mongo::timeseries::write_ops
