@@ -40,9 +40,7 @@ executor:
       serverless: true
       set_parameters:
         changeCollectionExpiredDocumentsRemoverJobSleepSeconds: 1
-        changeCollectionTruncateMarkersMinBytes: 4096
         enableTestCommands: 1
-        failpoint.changeCollectionTruncateOnlyOnSecondaries: "{mode: 'alwaysOn'}"
         featureFlagRequireTenantID: true
         featureFlagSecurityToken: true
         featureFlagServerlessChangeStreams: true
@@ -65,6 +63,7 @@ executor:
     voting_secondaries: false
   hooks:
     - class: PeriodicKillSecondaries
+      use_legacy_validate: true
     - class: EnableChangeStream
       tenant_id: 636d957b2646ddfaf9b5e13f
 matrix_suite: true
