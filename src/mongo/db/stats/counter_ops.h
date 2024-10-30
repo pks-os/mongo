@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2019-present MongoDB, Inc.
+ *    Copyright (C) 2024-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -29,47 +29,46 @@
 
 #pragma once
 
-#include <string>
-#include <vector>
-
-#include <boost/move/utility_core.hpp>
-#include <boost/optional/optional.hpp>
-
-#include "mongo/base/status.h"
-#include "mongo/bson/bsonobj.h"
-#include "mongo/bson/oid.h"
-#include "mongo/bson/timestamp.h"
-#include "mongo/db/catalog/collection_options.h"
-#include "mongo/db/namespace_string.h"
-#include "mongo/db/repl/cloner_test_fixture.h"
-#include "mongo/db/repl/tenant_migration_shared_data.h"
-#include "mongo/db/service_context.h"
-#include "mongo/logv2/log_component.h"
-#include "mongo/logv2/log_severity.h"
-#include "mongo/unittest/log_test.h"
-#include "mongo/util/uuid.h"
+#include "mongo/platform/atomic_word.h"
+#include <cstdint>
 
 namespace mongo {
-namespace repl {
 
-class TenantClonerTestFixture : public ClonerTestFixture {
-protected:
-    void setUp() override;
+/**
+ * Helper functions to operate on AtomicWord<long long> and int64_t interchangibly.
+ */
+namespace counter_ops {
+static int64_t get(const int64_t& counter) {
+    return counter;
+}
 
-    ServiceContext* serviceContext{nullptr};
-    TenantMigrationSharedData* getSharedData();
-    Status createCollection(const NamespaceString& nss, const CollectionOptions& options);
-    Status createIndexesOnEmptyCollection(const NamespaceString& nss,
-                                          const std::vector<BSONObj>& secondaryIndexSpecs);
+static int64_t get(const AtomicWord<long long>& counter) {
+    return counter.load();
+}
 
-    const Timestamp _operationTime = Timestamp(12345, 67);
-    const std::string _tenantId = OID::gen().toString();
-    const UUID _migrationId = UUID::gen();
+static void set(int64_t& counter, int64_t value) {
+    counter = value;
+}
 
-private:
-    unittest::MinimumLoggedSeverityGuard _verboseGuard{logv2::LogComponent::kTenantMigration,
-                                                       logv2::LogSeverity::Debug(1)};
-};
+static void set(int64_t& counter, const AtomicWord<long long>& value) {
+    counter = value.load();
+}
 
-}  // namespace repl
+static void set(AtomicWord<long long>& counter, int64_t value) {
+    counter.store(value);
+}
+
+static void add(int64_t& counter, int64_t value) {
+    counter += value;
+}
+
+static void add(int64_t& counter, const AtomicWord<long long>& value) {
+    counter += value.load();
+}
+
+static void add(AtomicWord<long long>& counter, int64_t value) {
+    counter.addAndFetch(value);
+}
+
+}  // namespace counter_ops
 }  // namespace mongo

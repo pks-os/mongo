@@ -77,7 +77,6 @@
 #include "mongo/db/storage/wiredtiger/wiredtiger_session_cache.h"
 #include "mongo/db/storage/wiredtiger/wiredtiger_session_data.h"
 #include "mongo/db/storage/wiredtiger/wiredtiger_util.h"
-#include "mongo/db/storage/write_unit_of_work.h"
 #include "mongo/db/transaction_resources.h"
 #include "mongo/logv2/log.h"
 #include "mongo/logv2/log_attr.h"
@@ -337,12 +336,13 @@ private:
 // static
 StatusWith<std::string> WiredTigerRecordStore::generateCreateString(
     const std::string& engineName,
-    const NamespaceString& nss,
+    StringData tableName,
     StringData ident,
     const CollectionOptions& options,
     StringData extraStrings,
     KeyFormat keyFormat,
-    bool loggingEnabled) {
+    bool loggingEnabled,
+    bool isOplog) {
 
     // Separate out a prefix and suffix in the default string. User configuration will
     // override values in the prefix, but not values in the suffix.
@@ -372,7 +372,7 @@ StatusWith<std::string> WiredTigerRecordStore::generateCreateString(
     ss << ",";
 
     ss << WiredTigerCustomizationHooks::get(getGlobalServiceContext())
-              ->getTableCreateConfig(NamespaceStringUtil::serializeForCatalog(nss));
+              ->getTableCreateConfig(tableName);
 
     ss << extraStrings << ",";
 
@@ -383,7 +383,7 @@ StatusWith<std::string> WiredTigerRecordStore::generateCreateString(
 
     ss << customOptions.getValue();
 
-    if (nss.isOplog()) {
+    if (isOplog) {
         // force file for oplog
         ss << "type=file,";
         // Tune down to 10m.  See SERVER-16247
@@ -411,7 +411,7 @@ StatusWith<std::string> WiredTigerRecordStore::generateCreateString(
 
     // Record store metadata
     ss << ",app_metadata=(formatVersion=" << kCurrentRecordStoreVersion;
-    if (nss.isOplog()) {
+    if (isOplog) {
         ss << ",oplogKeyExtractionVersion=1";
     }
     ss << ")";
@@ -741,7 +741,8 @@ void WiredTigerRecordStore::reclaimOplog(OperationContext* opCtx) {
 
         getNextMarker =
             writeConflictRetry(opCtx, "reclaimOplog", NamespaceString::kRsOplogNamespace, [&] {
-                WriteUnitOfWork wuow(opCtx);
+                auto& ru = *shard_role_details::getRecoveryUnit(opCtx);
+                StorageWriteTransaction txn(ru);
 
                 auto seekableCursor =
                     std::make_unique<WiredTigerRecordStoreCursor>(opCtx, *this, true);
@@ -800,7 +801,7 @@ void WiredTigerRecordStore::reclaimOplog(OperationContext* opCtx) {
                                   "error"_attr = status);
                     return false;
                 }
-                wuow.commit();
+                txn.commit();
 
                 // Remove the truncate marker after a successful truncation.
                 _oplog->getTruncateMarkers()->popOldestMarker();
@@ -1776,7 +1777,8 @@ void WiredTigerRecordStore::doCappedTruncateAfter(
         firstRemovedId = record->id;
     }
 
-    WriteUnitOfWork wuow(opCtx);
+    auto& ru = *shard_role_details::getRecoveryUnit(opCtx);
+    StorageWriteTransaction txn(ru);
 
     // Compute the number and associated sizes of the records to delete.
     {
@@ -1808,7 +1810,7 @@ void WiredTigerRecordStore::doCappedTruncateAfter(
 
     _changeNumRecordsAndDataSize(opCtx, -recordsRemoved, -bytesRemoved);
 
-    wuow.commit();
+    txn.commit();
 
     if (_oplog) {
         // Immediately rewind visibility to our truncation point, to prevent new

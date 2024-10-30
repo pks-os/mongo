@@ -58,9 +58,8 @@ std::unique_ptr<NetworkInterface> makeNetworkInterface(
             &EgressConnectionCloserManager::get(getGlobalServiceContext());
     }
 
-    auto svcCtx = hasGlobalServiceContext() ? getGlobalServiceContext() : nullptr;
     return std::make_unique<NetworkInterfaceTL>(
-        instanceName, connPoolOptions, svcCtx, std::move(hook), std::move(metadataHook));
+        instanceName, connPoolOptions, std::move(hook), std::move(metadataHook));
 }
 
 }  // namespace executor
