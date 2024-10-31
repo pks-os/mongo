@@ -310,7 +310,7 @@ const EphemeralForTestRecordStore::EphemeralForTestRecord* EphemeralForTestRecor
     if (it == _data->records.end()) {
         LOGV2_ERROR(23720,
                     "EphemeralForTestRecordStore::recordFor cannot find record",
-                    "uuid"_attr = _uuid ? _uuid->toString() : std::string{},
+                    "uuid"_attr = _uuid,
                     "loc"_attr = loc);
     }
     invariant(it != _data->records.end());
@@ -323,7 +323,7 @@ EphemeralForTestRecordStore::EphemeralForTestRecord* EphemeralForTestRecordStore
     if (it == _data->records.end()) {
         LOGV2_ERROR(23721,
                     "EphemeralForTestRecordStore::recordFor cannot find record",
-                    "uuid"_attr = _uuid ? _uuid->toString() : std::string{},
+                    "uuid"_attr = _uuid,
                     "loc"_attr = loc);
     }
     invariant(it != _data->records.end());
@@ -546,11 +546,11 @@ void EphemeralForTestRecordStore::doCappedTruncateAfter(
     }
 }
 
-int64_t EphemeralForTestRecordStore::storageSize(OperationContext* opCtx,
+int64_t EphemeralForTestRecordStore::storageSize(RecoveryUnit& ru,
                                                  BSONObjBuilder* extraInfo,
                                                  int infoLevel) const {
     // Note: not making use of extraInfo or infoLevel since we don't have extents
-    const int64_t recordOverhead = numRecords(opCtx) * sizeof(EphemeralForTestRecord);
+    const int64_t recordOverhead = numRecords() * sizeof(EphemeralForTestRecord);
     return _data->dataSize + recordOverhead;
 }
 

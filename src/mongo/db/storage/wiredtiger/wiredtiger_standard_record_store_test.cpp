@@ -68,7 +68,9 @@ TEST(WiredTigerRecordStoreTest, StorageSizeStatisticsDisabled) {
     std::unique_ptr<RecordStore> rs(harnessHelper.newRecordStore("a.b"));
 
     ServiceContext::UniqueOperationContext opCtx(harnessHelper.newOperationContext());
-    ASSERT_THROWS(rs->storageSize(opCtx.get()), AssertionException);
+    auto& ru = *shard_role_details::getRecoveryUnit(opCtx.get());
+
+    ASSERT_THROWS(rs->storageSize(ru), AssertionException);
 }
 
 TEST(WiredTigerRecordStoreTest, SizeStorer1) {
@@ -98,10 +100,7 @@ TEST(WiredTigerRecordStoreTest, SizeStorer1) {
         }
     }
 
-    {
-        ServiceContext::UniqueOperationContext opCtx(harnessHelper->newOperationContext());
-        ASSERT_EQUALS(N, rs->numRecords(opCtx.get()));
-    }
+    ASSERT_EQUALS(N, rs->numRecords());
 
     rs.reset(nullptr);
 
@@ -114,7 +113,6 @@ TEST(WiredTigerRecordStoreTest, SizeStorer1) {
         ServiceContext::UniqueOperationContext opCtx(harnessHelper->newOperationContext());
 
         WiredTigerRecordStore::Params params;
-        params.nss = NamespaceString::createNamespaceString_forTest("a.b");
         params.ident = ident;
         params.engineName = std::string{kWiredTigerEngineName};
         params.isCapped = false;
@@ -122,6 +120,7 @@ TEST(WiredTigerRecordStoreTest, SizeStorer1) {
         params.overwrite = true;
         params.isEphemeral = false;
         params.isLogged = false;
+        params.isChangeCollection = false;
         params.sizeStorer = &ss;
         params.tracksSizeAdjustments = true;
         params.forceUpdateWithFullDocument = false;
@@ -130,14 +129,11 @@ TEST(WiredTigerRecordStoreTest, SizeStorer1) {
             nullptr,
             WiredTigerRecoveryUnit::get(*shard_role_details::getRecoveryUnit(opCtx.get())),
             params);
-        ret->postConstructorInit(opCtx.get(), params.nss);
+        ret->postConstructorInit(opCtx.get());
         rs.reset(ret);
     }
 
-    {
-        ServiceContext::UniqueOperationContext opCtx(harnessHelper->newOperationContext());
-        ASSERT_EQUALS(N, rs->numRecords(opCtx.get()));
-    }
+    ASSERT_EQUALS(N, rs->numRecords());
 
     {
         ServiceContext::UniqueOperationContext opCtx(harnessHelper->newOperationContext());
@@ -203,7 +199,7 @@ protected:
 TEST_F(SizeStorerUpdateTest, Basic) {
     ServiceContext::UniqueOperationContext opCtx(harnessHelper->newOperationContext());
     long long val = 5;
-    rs->updateStatsAfterRepair(opCtx.get(), val, val);
+    rs->updateStatsAfterRepair(val, val);
     ASSERT_EQUALS(getNumRecords(), val);
     ASSERT_EQUALS(getDataSize(), val);
 };

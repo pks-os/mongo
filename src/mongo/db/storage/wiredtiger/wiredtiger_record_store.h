@@ -50,7 +50,6 @@
 #include "mongo/db/catalog/collection_options.h"
 #include "mongo/db/catalog/validate/validate_results.h"
 #include "mongo/db/collection_crud/capped_visibility.h"
-#include "mongo/db/namespace_string.h"
 #include "mongo/db/operation_context.h"
 #include "mongo/db/record_id.h"
 #include "mongo/db/stats/resource_consumption_metrics.h"
@@ -120,7 +119,6 @@ public:
                                                         bool isOplog = false);
 
     struct Params {
-        NamespaceString nss;
         boost::optional<UUID> uuid;
         std::string ident;
         std::string engineName;
@@ -129,6 +127,7 @@ public:
         bool overwrite;
         bool isEphemeral;
         bool isLogged;
+        bool isChangeCollection;
         int64_t oplogMaxSize = 0;
         WiredTigerSizeStorer* sizeStorer;
         bool tracksSizeAdjustments;
@@ -146,19 +145,19 @@ public:
 
     KeyFormat keyFormat() const override;
 
-    long long dataSize(OperationContext* opCtx) const override;
+    long long dataSize() const override;
 
-    long long numRecords(OperationContext* opCtx) const override;
+    long long numRecords() const override;
 
     bool selfManagedOplogTruncation() const override {
         return true;
     }
 
-    int64_t storageSize(OperationContext* opCtx,
+    int64_t storageSize(RecoveryUnit& ru,
                         BSONObjBuilder* extraInfo = nullptr,
                         int infoLevel = 0) const override;
 
-    int64_t freeStorageSize(OperationContext* opCtx) const override;
+    int64_t freeStorageSize(RecoveryUnit& ru) const override;
 
     void doDeleteRecord(OperationContext* opCtx, const RecordId& id) override;
 
@@ -201,13 +200,13 @@ public:
 
     StatusWith<int64_t> doCompact(OperationContext* opCtx, const CompactOptions& options) final;
 
-    void validate(OperationContext* opCtx, bool full, ValidateResults* results) override;
+    void validate(RecoveryUnit& ru, bool full, ValidateResults* results) override;
 
-    void appendNumericCustomStats(OperationContext* opCtx,
+    void appendNumericCustomStats(RecoveryUnit& ru,
                                   BSONObjBuilder* result,
                                   double scale) const override;
 
-    void appendAllCustomStats(OperationContext* opCtx,
+    void appendAllCustomStats(RecoveryUnit& ru,
                               BSONObjBuilder* result,
                               double scale) const override;
 
@@ -216,11 +215,9 @@ public:
                                bool inclusive,
                                const AboutToDeleteRecordCallback& aboutToDelete) override;
 
-    void updateStatsAfterRepair(OperationContext* opCtx,
-                                long long numRecords,
-                                long long dataSize) override;
+    void updateStatsAfterRepair(long long numRecords, long long dataSize) override;
 
-    Status updateOplogSize(OperationContext* opCtx, long long newOplogSize) override;
+    Status updateOplogSize(long long newOplogSize) override;
 
     std::shared_ptr<CollectionTruncateMarkers> getCollectionTruncateMarkers() override;
 
@@ -230,8 +227,8 @@ public:
      */
     void reclaimOplog(OperationContext* opCtx) override;
 
-    StatusWith<Timestamp> getLatestOplogTimestamp(OperationContext* opCtx) const override;
-    StatusWith<Timestamp> getEarliestOplogTimestamp(OperationContext* opCtx) override;
+    StatusWith<Timestamp> getLatestOplogTimestamp(RecoveryUnit& ru) const override;
+    StatusWith<Timestamp> getEarliestOplogTimestamp(RecoveryUnit& ru) override;
 
     RecordId getLargestKey(OperationContext* opCtx) const override;
 
@@ -251,8 +248,7 @@ public:
 
     int64_t getOplogMaxSize() const;
 
-    // Pass in NamespaceString, it is not possible to resolve the UUID to NamespaceString yet.
-    void postConstructorInit(OperationContext* opCtx, const NamespaceString& ns);
+    void postConstructorInit(OperationContext* opCtx);
 
     /*
      * Check the size information for this RecordStore. This function opens a cursor on the
@@ -327,7 +323,7 @@ private:
      *      are pending writes to this ident as part of the recovery process, and so we must
      *      always adjust size metadata for these idents.
      */
-    void _changeNumRecordsAndDataSize(OperationContext* opCtx,
+    void _changeNumRecordsAndDataSize(RecoveryUnit& ru,
                                       int64_t numRecordDiff,
                                       int64_t dataSizeDiff);
 

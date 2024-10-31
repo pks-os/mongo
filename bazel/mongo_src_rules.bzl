@@ -300,6 +300,30 @@ SASL_WINDOWS_COPTS = select({
     "//conditions:default": [],
 })
 
+SASL_WINDOWS_LINKFLAGS = select({
+    "@platforms//os:windows": ["/LIBPATH:external/windows_sasl/lib"],
+    "//conditions:default": [],
+})
+
+GLOBAL_WINDOWS_LIBRAY_LINKFLAGS = select({
+    "@platforms//os:windows": [
+        "bcrypt.lib",
+        "Dnsapi.lib",
+        "Crypt32.lib",
+        "Version.lib",
+        "Winmm.lib",
+        "Iphlpapi.lib",
+        "Pdh.lib",
+        "kernel32.lib",
+        "shell32.lib",
+        "ws2_32.lib",
+        "DbgHelp.lib",
+        "Psapi.lib",
+        "Secur32.lib",
+    ],
+    "//conditions:default": [],
+})
+
 WINDOWS_LINKFLAGS = (
     WINDOWS_DEFAULT_LINKFLAGS +
     WINDOWS_PDB_PAGE_SIZE_LINKOPT +
@@ -1279,7 +1303,9 @@ MONGO_GLOBAL_LINKFLAGS = (
     DISABLE_SOURCE_WARNING_AS_ERRORS_LINKFLAGS +
     THIN_LTO_FLAGS +
     SYMBOL_ORDER_LINKFLAGS +
-    COVERAGE_FLAGS
+    COVERAGE_FLAGS +
+    GLOBAL_WINDOWS_LIBRAY_LINKFLAGS +
+    SASL_WINDOWS_LINKFLAGS
 )
 
 MONGO_GLOBAL_ADDITIONAL_LINKER_INPUTS = SYMBOL_ORDER_FILES
@@ -1437,12 +1463,23 @@ def mongo_cc_library(
     else:
         enterprise_compatible = []
 
-    if "compile_requires_large_memory" in tags:
+    if "compile_requires_large_memory_gcc" in tags:
         exec_properties |= select({
             "//bazel/config:gcc_x86_64": {
                 "Pool": "large_mem_x86_64",
             },
             "//bazel/config:gcc_aarch64": {
+                "Pool": "large_memory_arm64",
+            },
+            "//conditions:default": {},
+        })
+
+    if "compile_requires_large_memory_fsan" in tags:
+        exec_properties |= select({
+            "//bazel/config:fsan_enabled_x86_64": {
+                "Pool": "large_mem_x86_64",
+            },
+            "//bazel/config:fsan_enabled_aarch64": {
                 "Pool": "large_memory_arm64",
             },
             "//conditions:default": {},
