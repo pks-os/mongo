@@ -28,30 +28,22 @@
  */
 
 #include <boost/optional.hpp>
-#include <memory>
-#include <string>
-#include <variant>
-#include <vector>
 
 #include <boost/move/utility_core.hpp>
 #include <boost/none.hpp>
 #include <boost/optional/optional.hpp>
 
-#include "mongo/base/error_codes.h"
-#include "mongo/base/status.h"
 #include "mongo/base/string_data.h"
 #include "mongo/bson/bsonelement.h"
 #include "mongo/bson/oid.h"
 #include "mongo/db/catalog/catalog_test_fixture.h"
 #include "mongo/db/namespace_string.h"
-#include "mongo/db/repl/optime.h"
 #include "mongo/db/timeseries/bucket_catalog/bucket.h"
 #include "mongo/db/timeseries/bucket_catalog/bucket_catalog.h"
 #include "mongo/db/timeseries/bucket_catalog/bucket_catalog_internal.h"
 #include "mongo/db/timeseries/bucket_catalog/bucket_identifiers.h"
 #include "mongo/db/timeseries/bucket_catalog/bucket_metadata.h"
 #include "mongo/db/timeseries/bucket_catalog/bucket_state_registry.h"
-#include "mongo/db/timeseries/bucket_catalog/closed_bucket.h"
 #include "mongo/db/timeseries/bucket_catalog/execution_stats.h"
 #include "mongo/db/timeseries/bucket_catalog/global_bucket_catalog.h"
 #include "mongo/db/timeseries/bucket_catalog/rollover.h"
@@ -105,8 +97,8 @@ public:
     }
 
     Bucket& createBucket(InsertContext& info, Date_t time) {
-        auto ptr =
-            &internal::allocateBucket(*this, *stripes[info.stripeNumber], withLock, info, time);
+        auto ptr = &internal::allocateBucket(
+            *this, *stripes[info.stripeNumber], withLock, info, time, nullptr);
         ASSERT_FALSE(hasBeenCleared(*ptr));
         return *ptr;
     }
@@ -173,7 +165,7 @@ public:
     UUID uuid3 = UUID::gen();
     BSONElement elem;
     TrackingContext trackingContext;
-    BucketMetadata bucketMetadata{trackingContext, elem, nullptr, boost::none};
+    BucketMetadata bucketMetadata{trackingContext, elem, boost::none};
     BucketKey bucketKey1{uuid1, bucketMetadata};
     BucketKey bucketKey2{uuid2, bucketMetadata};
     BucketKey bucketKey3{uuid3, bucketMetadata};
@@ -791,7 +783,7 @@ TEST_F(BucketStateRegistryTest, ClosingBucketGoesThroughPendingCompressionState)
                                      stats,
                                      StringData{bucket.timeField.data(), bucket.timeField.size()});
     ASSERT(claimWriteBatchCommitRights(*batch));
-    ASSERT_OK(prepareCommit(*this, batch));
+    ASSERT_OK(prepareCommit(*this, batch, nullptr));
     ASSERT_TRUE(doesBucketStateMatch(bucketId, BucketState::kPrepared));
 
     {

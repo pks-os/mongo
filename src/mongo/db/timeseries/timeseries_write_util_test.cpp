@@ -34,13 +34,11 @@
 #include <boost/move/utility_core.hpp>
 #include <cstdint>
 #include <string>
-#include <utility>
 
 #include <boost/optional/optional.hpp>
 
 #include "mongo/bson/bsonelement.h"
 #include "mongo/bson/bsonmisc.h"
-#include "mongo/bson/bsonobjbuilder.h"
 #include "mongo/bson/json.h"
 #include "mongo/bson/unordered_fields_bsonobj_comparator.h"
 #include "mongo/db/catalog/catalog_test_fixture.h"
@@ -52,11 +50,12 @@
 #include "mongo/db/repl/oplog.h"
 #include "mongo/db/storage/snapshot.h"
 #include "mongo/db/storage/write_unit_of_work.h"
-#include "mongo/db/timeseries//timeseries_constants.h"
 #include "mongo/db/timeseries/bucket_catalog/bucket_identifiers.h"
 #include "mongo/db/timeseries/bucket_catalog/execution_stats.h"
 #include "mongo/db/timeseries/bucket_catalog/tracking_contexts.h"
 #include "mongo/db/timeseries/bucket_compression.h"
+#include "mongo/db/timeseries/timeseries_constants.h"
+#include "mongo/db/timeseries/timeseries_options.h"
 #include "mongo/db/timeseries/timeseries_write_util.h"
 #include "mongo/idl/server_parameter_test_util.h"
 #include "mongo/logv2/log.h"
@@ -125,7 +124,6 @@ protected:
             {bucket_catalog::getTrackingContext(_trackingContexts,
                                                 bucket_catalog::TrackingScope::kOpenBucketsByKey),
              {},
-             nullptr,
              boost::none});
     }
 
@@ -460,7 +458,6 @@ TEST_F(TimeseriesWriteUtilTest, MakeTimeseriesCompressedDiffUpdateOpWithMeta) {
                       {bucket_catalog::getTrackingContext(
                            _trackingContexts, bucket_catalog::TrackingScope::kOpenBucketsByKey),
                        uncompressedPreImage.getField("meta"),
-                       nullptr,
                        boost::none});
     const std::vector<BSONObj> measurements = {
         fromjson(R"({"time":{"$date":"2022-06-06T15:34:30.000Z"},"meta":{"tag":1},"a":0,"b":0})"),
@@ -1149,7 +1146,6 @@ TEST_F(TimeseriesWriteUtilTest, SortMeasurementsOnTimeField) {
                       {bucket_catalog::getTrackingContext(
                            _trackingContexts, bucket_catalog::TrackingScope::kOpenBucketsByKey),
                        metaField.getField("meta"),
-                       nullptr,
                        boost::none});
     batch->measurements = {measurements.begin(), measurements.end()};
     batch->min = fromjson(R"({"time":{"$date":"2022-06-06T15:34:00.000Z"},"a":1,"b":1})");
@@ -1203,7 +1199,6 @@ TEST_F(TimeseriesWriteUtilTest, SortMeasurementsOnTimeFieldExtendedRange) {
                       {bucket_catalog::getTrackingContext(
                            _trackingContexts, bucket_catalog::TrackingScope::kOpenBucketsByKey),
                        metaField.getField("meta"),
-                       nullptr,
                        boost::none});
     batch->measurements = {measurements.begin(), measurements.end()};
     batch->min = measurements[1];

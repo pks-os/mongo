@@ -31,8 +31,6 @@
 #include <absl/meta/type_traits.h>
 #include <boost/container/small_vector.hpp>
 #include <boost/container/vector.hpp>
-#include <iterator>
-#include <string>
 #include <utility>
 
 #include <boost/move/utility_core.hpp>
@@ -40,25 +38,17 @@
 
 #include "mongo/bson/bsonobj.h"
 #include "mongo/bson/bsonobjbuilder.h"
-#include "mongo/bson/column/bsoncolumnbuilder.h"
+#include "mongo/bson/oid.h"
 #include "mongo/db/concurrency/exception_util.h"
-#include "mongo/db/feature_flag.h"
-#include "mongo/db/server_options.h"
-#include "mongo/db/storage/storage_parameters_gen.h"
 #include "mongo/db/timeseries/bucket_catalog/bucket_catalog.h"
 #include "mongo/db/timeseries/bucket_catalog/bucket_catalog_internal.h"
 #include "mongo/db/timeseries/bucket_catalog/bucket_metadata.h"
-#include "mongo/db/timeseries/bucket_catalog/flat_bson.h"
 #include "mongo/db/timeseries/bucket_catalog/rollover.h"
-#include "mongo/db/timeseries/bucket_compression.h"
 #include "mongo/db/timeseries/timeseries_constants.h"
 #include "mongo/platform/compiler.h"
+#include "mongo/stdx/unordered_map.h"
 #include "mongo/util/assert_util.h"
-#include "mongo/util/debug_util.h"
-#include "mongo/util/decorable.h"
 #include "mongo/util/fail_point.h"
-#include "mongo/util/future.h"
-#include "mongo/util/string_map.h"
 #include "mongo/util/tracking_context.h"
 
 #define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
@@ -76,7 +66,8 @@ MONGO_FAIL_POINT_DEFINE(hangTimeseriesInsertBeforeReopeningBucket);
  */
 void prepareWriteBatchForCommit(TrackingContexts& trackingContexts,
                                 WriteBatch& batch,
-                                Bucket& bucket) {
+                                Bucket& bucket,
+                                const StringDataComparator* comparator) {
     invariant(batch.commitRights.load());
     batch.numPreviouslyCommittedMeasurements = bucket.numCommittedMeasurements;
 
@@ -99,8 +90,7 @@ void prepareWriteBatchForCommit(TrackingContexts& trackingContexts,
     }
 
     for (const auto& doc : batch.measurements) {
-        bucket.minmax.update(
-            doc, bucket.key.metadata.getMetaField(), bucket.key.metadata.getComparator());
+        bucket.minmax.update(doc, bucket.key.metadata.getMetaField(), comparator);
     }
 
     const bool isUpdate = batch.numPreviouslyCommittedMeasurements > 0;
@@ -277,8 +267,13 @@ StatusWith<InsertResult> tryInsert(BucketCatalog& catalog,
     auto& stripe = *catalog.stripes[insertContext.stripeNumber];
     stdx::lock_guard stripeLock{stripe.mutex};
 
-    Bucket* bucket = internal::useBucket(
-        catalog, stripe, stripeLock, insertContext, internal::AllowBucketCreation::kNo, time);
+    Bucket* bucket = internal::useBucket(catalog,
+                                         stripe,
+                                         stripeLock,
+                                         insertContext,
+                                         internal::AllowBucketCreation::kNo,
+                                         time,
+                                         comparator);
     // If there are no open buckets for our measurement that we can use, we return a
     // reopeningContext to try reopening a closed bucket from disk.
     if (!bucket) {
@@ -302,7 +297,8 @@ StatusWith<InsertResult> tryInsert(BucketCatalog& catalog,
                                             insertContext,
                                             *bucket,
                                             time,
-                                            storageCacheSize);
+                                            storageCacheSize,
+                                            comparator);
     // If our insert was successful, return a SuccessfulInsertion with our
     // WriteBatch.
     if (auto* batch = get_if<std::shared_ptr<WriteBatch>>(&insertionResult)) {
@@ -330,7 +326,8 @@ StatusWith<InsertResult> tryInsert(BucketCatalog& catalog,
                                                insertContext,
                                                *alternate,
                                                time,
-                                               storageCacheSize);
+                                               storageCacheSize,
+                                               comparator);
             if (auto* batch = get_if<std::shared_ptr<WriteBatch>>(&insertionResult)) {
                 return SuccessfulInsertion{std::move(*batch),
                                            std::move(insertContext.closedBuckets)};
@@ -427,7 +424,8 @@ StatusWith<InsertResult> insertWithReopeningContext(BucketCatalog& catalog,
                                                     insertContext,
                                                     bucket,
                                                     time,
-                                                    storageCacheSize);
+                                                    storageCacheSize,
+                                                    comparator);
             auto* batch = get_if<std::shared_ptr<WriteBatch>>(&insertionResult);
             invariant(batch);
             return SuccessfulInsertion{std::move(*batch), std::move(insertContext.closedBuckets)};
@@ -441,8 +439,13 @@ StatusWith<InsertResult> insertWithReopeningContext(BucketCatalog& catalog,
         }
     }
 
-    Bucket* bucket = useBucket(
-        catalog, stripe, stripeLock, insertContext, internal::AllowBucketCreation::kYes, time);
+    Bucket* bucket = useBucket(catalog,
+                               stripe,
+                               stripeLock,
+                               insertContext,
+                               internal::AllowBucketCreation::kYes,
+                               time,
+                               comparator);
     invariant(bucket);
 
     auto insertionResult = insertIntoBucket(catalog,
@@ -455,7 +458,8 @@ StatusWith<InsertResult> insertWithReopeningContext(BucketCatalog& catalog,
                                             insertContext,
                                             *bucket,
                                             time,
-                                            storageCacheSize);
+                                            storageCacheSize,
+                                            comparator);
     auto* batch = get_if<std::shared_ptr<WriteBatch>>(&insertionResult);
     invariant(batch);
     return SuccessfulInsertion{std::move(*batch), std::move(insertContext.closedBuckets)};
@@ -472,8 +476,13 @@ StatusWith<InsertResult> insert(BucketCatalog& catalog,
     auto& stripe = *catalog.stripes[insertContext.stripeNumber];
     stdx::lock_guard stripeLock{stripe.mutex};
 
-    Bucket* bucket = useBucket(
-        catalog, stripe, stripeLock, insertContext, internal::AllowBucketCreation::kYes, time);
+    Bucket* bucket = useBucket(catalog,
+                               stripe,
+                               stripeLock,
+                               insertContext,
+                               internal::AllowBucketCreation::kYes,
+                               time,
+                               comparator);
     invariant(bucket);
 
     auto insertionResult = insertIntoBucket(catalog,
@@ -486,7 +495,8 @@ StatusWith<InsertResult> insert(BucketCatalog& catalog,
                                             insertContext,
                                             *bucket,
                                             time,
-                                            storageCacheSize);
+                                            storageCacheSize,
+                                            comparator);
 
     auto* batch = get_if<std::shared_ptr<WriteBatch>>(&insertionResult);
     invariant(batch);
@@ -501,7 +511,9 @@ void waitToInsert(InsertWaiter* waiter) {
     }
 }
 
-Status prepareCommit(BucketCatalog& catalog, std::shared_ptr<WriteBatch> batch) {
+Status prepareCommit(BucketCatalog& catalog,
+                     std::shared_ptr<WriteBatch> batch,
+                     const StringDataComparator* comparator) {
     auto getBatchStatus = [&] {
         return batch->promise.getFuture().getNoThrow().getStatus();
     };
@@ -539,7 +551,7 @@ Status prepareCommit(BucketCatalog& catalog, std::shared_ptr<WriteBatch> batch) 
         return getBatchStatus();
     }
 
-    prepareWriteBatchForCommit(catalog.trackingContexts, *batch, *bucket);
+    prepareWriteBatchForCommit(catalog.trackingContexts, *batch, *bucket, comparator);
 
     return Status::OK();
 }
@@ -738,7 +750,6 @@ BucketId extractBucketId(BucketCatalog& bucketCatalog,
                         BucketMetadata{getTrackingContext(bucketCatalog.trackingContexts,
                                                           TrackingScope::kOpenBucketsByKey),
                                        metadata,
-                                       comparator,
                                        options.getMetaField()}};
     return {collectionUUID, bucketOID, key.signature()};
 }
@@ -750,9 +761,8 @@ BucketKey::Signature getKeySignature(const TimeseriesOptions& options,
     TrackingContext trackingContext;
     auto metaField = options.getMetaField();
     const BSONElement metadata = metaField ? metadataObj[metaField.value()] : BSONElement();
-    const BucketKey key{
-        collectionUUID,
-        BucketMetadata{trackingContext, metadata, comparator, options.getMetaField()}};
+    const BucketKey key{collectionUUID,
+                        BucketMetadata{trackingContext, metadata, options.getMetaField()}};
     return key.signature();
 }
 

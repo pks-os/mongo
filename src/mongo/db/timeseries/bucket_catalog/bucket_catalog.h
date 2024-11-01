@@ -49,10 +49,7 @@
 #include "mongo/base/string_data.h"
 #include "mongo/bson/bsonobj.h"
 #include "mongo/bson/bsonobjbuilder.h"
-#include "mongo/bson/oid.h"
 #include "mongo/bson/unordered_fields_bsonobj_comparator.h"
-#include "mongo/db/catalog/collection.h"
-#include "mongo/db/database_name.h"
 #include "mongo/db/query/write_ops/single_write_result_gen.h"
 #include "mongo/db/timeseries/bucket_catalog/bucket.h"
 #include "mongo/db/timeseries/bucket_catalog/bucket_identifiers.h"
@@ -69,7 +66,6 @@
 #include "mongo/db/views/view.h"
 #include "mongo/platform/atomic_word.h"
 #include "mongo/stdx/mutex.h"
-#include "mongo/stdx/unordered_map.h"
 #include "mongo/stdx/unordered_set.h"
 #include "mongo/util/hierarchical_acquisition.h"
 #include "mongo/util/string_map.h"
@@ -319,7 +315,9 @@ void waitToInsert(InsertWaiter* waiter);
  * on the same bucket, or there is an outstanding 'ReopeningRequest' for the same series (metaField
  * value), this operation will block waiting for it to complete.
  */
-Status prepareCommit(BucketCatalog& catalog, std::shared_ptr<WriteBatch> batch);
+Status prepareCommit(BucketCatalog& catalog,
+                     std::shared_ptr<WriteBatch> batch,
+                     const StringDataComparator* comparator);
 
 /**
  * Records the result of a batch commit. Caller must already have commit rights on batch, and batch
