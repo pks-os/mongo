@@ -111,6 +111,7 @@
 #include "mongo/util/string_map.h"
 #include "mongo/util/time_support.h"
 #include "mongo/util/uuid.h"
+#include "mongo/util/versioned_value.h"
 
 namespace mongo {
 
@@ -705,29 +706,6 @@ public:
     bool isDataConsistent() const override;
     void setConsistentDataAvailable_forTest();
 
-    class SharedReplSetConfig {
-    public:
-        struct Lease {
-            uint64_t version = 0;
-            std::shared_ptr<ReplSetConfig> config;
-        };
-
-        SharedReplSetConfig();
-        Lease renew() const;
-        bool isStale(const Lease& lease) const;
-        ReplSetConfig& getConfig() const;
-        // This must be called while holding a lock on the
-        // ReplicationCoordinatorImpl _mutex. Unlike getConfig(), it does not
-        // provide any locking of its own.
-        ReplSetConfig& getConfig(WithLock lk) const;
-        void setConfig(std::shared_ptr<ReplSetConfig> newConfig);
-
-    private:
-        mutable WriteRarelyRWMutex _rwMutex;
-        Atomic<uint64_t> _version;
-        std::shared_ptr<ReplSetConfig> _current;
-    };
-
 private:
     using CallbackFn = executor::TaskExecutor::CallbackFn;
 
@@ -910,7 +888,7 @@ private:
     class WaiterList {
     public:
         WaiterList() = delete;
-        WaiterList(Atomic64Metric& waiterCountMetric);
+        WaiterList(Counter64& waiterCountMetric);
 
         // Adds waiter into the list.
         void add(WithLock lk, const OpTime& opTime, SharedWaiterHandle waiter);
@@ -931,13 +909,11 @@ private:
         void setErrorAll(WithLock lk, Status status);
 
     private:
-        void _updateMetric(WithLock);
-
         // Waiters sorted by OpTime.
         std::multimap<OpTime, SharedWaiterHandle> _waiters;
         // We keep a separate count outside _waiters.size() in order to avoid having to
         // take a lock to read the metric.
-        Atomic64Metric& _waiterCountMetric;
+        Counter64& _waiterCountMetric;
     };
 
     // This is a waiter list for things waiting on opTimes along with a WriteConcern.  It breaks
@@ -1883,6 +1859,12 @@ private:
      */
     bool _isCollectionReplicated(OperationContext* opCtx, const NamespaceStringOrUUID& nsOrUUID);
 
+    /**
+     * Returns the latest configuration without acquiring `_mutex`. Internally, it reads the config
+     * from a thread-local cache. The config is refreshed to the latest if stale.
+     */
+    const ReplSetConfig& _getReplSetConfig() const;
+
     //
     // All member variables are labeled with one of the following codes indicating the
     // synchronization rules for accessing them.
@@ -1971,7 +1953,7 @@ private:
     // An instance for getting a lease on the current ReplicaSet
     // configuration object, including the information about tag groups that is
     // used to satisfy write concern requests with named gle modes.
-    SharedReplSetConfig _rsConfig;  // (S)
+    mutable VersionedValue<ReplSetConfig, WriteRarelyRWMutex> _rsConfig;  // (S)
 
     // This member's index position in the current config.
     int _selfIndex;  // (M)
@@ -2199,7 +2181,7 @@ private:
 };
 
 extern Counter64& replicationWaiterListMetric;
-extern Atomic64Metric& opTimeWaiterListMetric;
+extern Counter64& opTimeWaiterListMetric;
 
 }  // namespace repl
 }  // namespace mongo

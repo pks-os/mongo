@@ -1210,6 +1210,14 @@ COVERAGE_FLAGS = select({
     "//conditions:default": [],
 })
 
+MACOS_SSL_LINKFLAGS = select({
+    "//bazel/config:ssl_enabled_macos": [
+        "-framework CoreFoundation",
+        "-framework Security",
+    ],
+    "//conditions:default": [],
+})
+
 MONGO_GLOBAL_INCLUDE_DIRECTORIES = [
     "-Isrc",
     "-I$(GENDIR)/src",
@@ -1305,7 +1313,8 @@ MONGO_GLOBAL_LINKFLAGS = (
     SYMBOL_ORDER_LINKFLAGS +
     COVERAGE_FLAGS +
     GLOBAL_WINDOWS_LIBRAY_LINKFLAGS +
-    SASL_WINDOWS_LINKFLAGS
+    SASL_WINDOWS_LINKFLAGS +
+    MACOS_SSL_LINKFLAGS
 )
 
 MONGO_GLOBAL_ADDITIONAL_LINKER_INPUTS = SYMBOL_ORDER_FILES
@@ -1320,7 +1329,7 @@ def force_includes_copt(package_name, name):
     if package_name.startswith("src/mongo"):
         basic_h = "mongo/platform/basic.h"
         return select({
-            "@platforms//os:windows": ["/FI", basic_h],
+            "@platforms//os:windows": ["/FI" + basic_h],
             "//conditions:default": ["-include", basic_h],
         })
 
@@ -1332,7 +1341,7 @@ def force_includes_copt(package_name, name):
             "//bazel/config:linux_x86_64": ["-include", "third_party/mozjs/platform/x86_64/linux/build/js-config.h"],
             "//bazel/config:macos_aarch64": ["-include", "third_party/mozjs/platform/aarch64/macOS/build/js-config.h"],
             "//bazel/config:macos_x86_64": ["-include", "third_party/mozjs/platform/x86_64/macOS/build/js-config.h"],
-            "//bazel/config:windows_x86_64": ["/FI", "third_party/mozjs/platform/x86_64/windows/build/js-config.h"],
+            "//bazel/config:windows_x86_64": ["/FI" + "third_party/mozjs/platform/x86_64/windows/build/js-config.h"],
         })
 
     return []
@@ -2074,9 +2083,13 @@ def mongo_cc_proto_library(
         deps,
         **kwargs):
     native.cc_proto_library(
-        name = name,
+        name = name + "_raw",
         deps = deps,
         **kwargs
+    )
+    strip_deps(
+        name = name,
+        input = name + "_raw",
     )
 
 def mongo_cc_grpc_library(
