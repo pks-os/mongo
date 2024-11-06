@@ -52,6 +52,10 @@ public:
      */
     void shutdown();
 
+    bool running() const;
+
+    void appendStats(BSONObjBuilder& builder) const;
+
 private:
     void _run();
 
@@ -61,6 +65,12 @@ private:
     bool _deleteExcessDocuments(OperationContext* opCtx);
 
     stdx::thread _thread;
+
+    // Cumulative amount of time spent truncating the oplog.
+    AtomicWord<int64_t> _totalTimeTruncating;
+
+    // Cumulative number of truncates of the oplog.
+    AtomicWord<int64_t> _truncateCount;
 };
 
 }  // namespace mongo

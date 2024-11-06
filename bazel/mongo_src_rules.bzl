@@ -1464,6 +1464,8 @@ def mongo_cc_library(
         hdrs = hdrs + ["//src/mongo:mongo_config_header"]
         if name != "boost_assert_shim":
             deps += MONGO_GLOBAL_SRC_DEPS
+            if name != "_global_header_bypass":
+                deps += ["//src/mongo:_global_header_bypass"]
 
     if "modules/enterprise" in native.package_name():
         enterprise_compatible = select({
@@ -1675,6 +1677,7 @@ def _mongo_cc_binary_and_program(
     if native.package_name().startswith("src/mongo"):
         srcs = srcs + ["//src/mongo:mongo_config_header"]
         deps += MONGO_GLOBAL_SRC_DEPS
+        deps += ["//src/mongo:_global_header_bypass"]
 
     if "modules/enterprise" in native.package_name():
         enterprise_compatible = select({
@@ -1735,10 +1738,22 @@ def _mongo_cc_binary_and_program(
             "//bazel/config:linkstatic_disabled": deps,
             "//conditions:default": [],
         }),
-        "target_compatible_with": target_compatible_with + enterprise_compatible,
+        "target_compatible_with": target_compatible_with + enterprise_compatible + select({
+            "//bazel/config:shared_archive_enabled": ["@platforms//:incompatible"],
+            "//conditions:default": [],
+        }),
         "additional_linker_inputs": additional_linker_inputs + MONGO_GLOBAL_ADDITIONAL_LINKER_INPUTS,
         "exec_properties": exec_properties,
     } | kwargs
+
+    create_link_deps(
+        name = name + LINK_DEP_SUFFIX,
+        target_name = name,
+        link_deps = all_deps,
+        tags = ["scons_link_lists"],
+        testonly = testonly,
+        target_compatible_with = target_compatible_with + enterprise_compatible,
+    )
 
     if _program_type == "binary":
         cc_binary(**args)
@@ -1965,7 +1980,7 @@ def idl_generator_impl(ctx):
         ),
     ]
 
-idl_generator = rule(
+idl_generator_rule = rule(
     idl_generator_impl,
     attrs = {
         "deps": attr.label_list(
@@ -1998,6 +2013,39 @@ idl_generator = rule(
     toolchains = ["@bazel_tools//tools/python:toolchain_type"],
     fragments = ["py"],
 )
+
+def write_target_impl(ctx):
+    out = ctx.actions.declare_file(ctx.label.name + ".gen_source_list")
+    ctx.actions.write(
+        out,
+        "//" + ctx.label.package + ":" + ctx.attr.target_name,
+    )
+    return [
+        DefaultInfo(
+            files = depset([out]),
+        ),
+    ]
+
+write_target = rule(
+    write_target_impl,
+    attrs = {
+        "target_name": attr.string(
+            doc = "the name of the target to record",
+        ),
+    },
+)
+
+def idl_generator(name, tags = [], **kwargs):
+    write_target(
+        name = name + "_gen_source_tag",
+        target_name = name,
+        tags = ["scons_link_lists"],
+    )
+    idl_generator_rule(
+        name = name,
+        tags = tags + ["gen_source"],
+        **kwargs
+    )
 
 def symlink_impl(ctx):
     ctx.actions.symlink(
