@@ -136,8 +136,12 @@ void ValidateResults::appendToResultObj(BSONObjBuilder* resultObj,
         BSONObjBuilder bob(indexDetails.subobjStart(indexName));
         bob.appendBool("valid", ivr.isValid());
 
-        buildFixedSizedArray(bob, "warnings", ivr.getWarnings(), maxSizePerEntry);
-        buildFixedSizedArray(bob, "errors", ivr.getErrors(), maxSizePerEntry);
+        if (!ivr.getWarnings().empty()) {
+            buildFixedSizedArray(bob, "warnings", ivr.getWarnings(), maxSizePerEntry);
+        }
+        if (!ivr.getErrors().empty()) {
+            buildFixedSizedArray(bob, "errors", ivr.getErrors(), maxSizePerEntry);
+        }
 
         keysPerIndex.appendNumber(indexName, static_cast<long long>(ivr.getKeysTraversed()));
     }

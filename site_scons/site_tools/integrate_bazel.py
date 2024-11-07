@@ -1,6 +1,7 @@
 import atexit
 import errno
 import getpass
+import glob
 import hashlib
 import json
 import os
@@ -411,6 +412,8 @@ def bazel_build_thread_func(env, log_dir: str, verbose: bool, ninja_generate: bo
         extra_args = ["--output_filter=DONT_MATCH_ANYTHING"]
 
     if ninja_generate:
+        for file in glob.glob("bazel-out/**/*.gen_source_list", recursive=True):
+            os.remove(file)
         extra_args += ["--build_tag_filters=scons_link_lists"]
 
     bazel_cmd = Globals.bazel_base_build_command + extra_args + ["//src/..."]
@@ -1085,6 +1088,16 @@ def generate(env: SCons.Environment.Environment) -> None:
         )
         minimum_macos_version = "11.0" if normalized_arch == "arm64" else "10.14"
         bazel_internal_flags.append(f"--macos_minimum_os={minimum_macos_version}")
+
+    if normalized_os == "windows":
+        windows_temp_dir = "Z:/bazel_tmp"
+        if os.path.isdir(windows_temp_dir):
+            bazel_internal_flags.append(f"--action_env=TMP={windows_temp_dir}")
+            bazel_internal_flags.append(f"--action_env=TEMP={windows_temp_dir}")
+        else:
+            print(
+                f"Tried to use {windows_temp_dir} as TMP and TEMP environment variables but it did not exist. This will lead to a low cache hit rate."
+            )
 
     http_client_option = env.GetOption("enable-http-client")
     if http_client_option is not None:
