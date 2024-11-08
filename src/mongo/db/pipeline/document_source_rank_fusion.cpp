@@ -62,11 +62,12 @@
 
 namespace mongo {
 
-REGISTER_DOCUMENT_SOURCE_WITH_FEATURE_FLAG(rankFusion,
-                                           DocumentSourceRankFusion::LiteParsed::parse,
-                                           DocumentSourceRankFusion::createFromBson,
-                                           AllowedWithApiStrict::kNeverInVersion1,
-                                           feature_flags::gFeatureFlagSearchHybridScoring);
+REGISTER_DOCUMENT_SOURCE_WITH_FEATURE_FLAG(
+    rankFusion,
+    DocumentSourceRankFusion::LiteParsed::parse,
+    DocumentSourceRankFusion::createFromBson,
+    AllowedWithApiStrict::kNeverInVersion1,
+    feature_flags::gFeatureFlagSearchHybridScoringPrerequisites);
 
 namespace {
 /**
@@ -226,7 +227,7 @@ boost::intrusive_ptr<DocumentSource> buildUnionWithPipeline(
     bsonPipeline.push_back(unwind(prefix));
     bsonPipeline.push_back(addScoreField(prefix, rankConstant));
 
-    auto collName = expCtx->ns.coll();
+    auto collName = expCtx->getNamespaceString().coll();
 
     BSONObj inputToUnionWith =
         BSON("$unionWith" << BSON("coll" << collName << "pipeline" << bsonPipeline));

@@ -30,6 +30,7 @@
 #include "mongo/db/pipeline/search/document_source_vector_search.h"
 
 #include "mongo/base/string_data.h"
+#include "mongo/db/pipeline/document_source_sort.h"
 #include "mongo/db/pipeline/search/document_source_internal_search_id_lookup.h"
 #include "mongo/db/pipeline/search/lite_parsed_search.h"
 #include "mongo/db/pipeline/search/vector_search_helper.h"
@@ -72,7 +73,7 @@ DocumentSourceVectorSearch::DocumentSourceVectorSearch(
 }
 
 void DocumentSourceVectorSearch::initializeOpDebugVectorSearchMetrics() {
-    auto& opDebug = CurOp::get(pExpCtx->opCtx)->debug();
+    auto& opDebug = CurOp::get(pExpCtx->getOperationContext())->debug();
     double numCandidatesLimitRatio = [&] {
         if (!_limit.has_value()) {
             return 0.0;
@@ -112,7 +113,7 @@ Value DocumentSourceVectorSearch::serialize(const SerializationOptions& opts) co
 
     // We don't want router to make a remote call to mongot even though it can generate explain
     // output.
-    if (!opts.verbosity || pExpCtx->inRouter) {
+    if (!opts.verbosity || pExpCtx->getInRouter()) {
         return Value(Document{{kStageName, _originalSpec}});
     }
 
@@ -143,7 +144,7 @@ Value DocumentSourceVectorSearch::serialize(const SerializationOptions& opts) co
 
 boost::optional<BSONObj> DocumentSourceVectorSearch::getNext() {
     try {
-        return _cursor->getNext(pExpCtx->opCtx);
+        return _cursor->getNext(pExpCtx->getOperationContext());
     } catch (DBException& ex) {
         ex.addContext("Remote error from mongot");
         throw;
@@ -152,7 +153,7 @@ boost::optional<BSONObj> DocumentSourceVectorSearch::getNext() {
 
 DocumentSource::GetNextResult DocumentSourceVectorSearch::getNextAfterSetup() {
     auto response = getNext();
-    auto& opDebug = CurOp::get(pExpCtx->opCtx)->debug();
+    auto& opDebug = CurOp::get(pExpCtx->getOperationContext())->debug();
 
     if (opDebug.msWaitingForMongot) {
         *opDebug.msWaitingForMongot += durationCount<Milliseconds>(_cursor->resetWaitingTime());
@@ -174,7 +175,7 @@ DocumentSource::GetNextResult DocumentSourceVectorSearch::getNextAfterSetup() {
     }
 
     // Populate $sortKey metadata field so that mongos can properly merge sort the document stream.
-    if (pExpCtx->needsMerge) {
+    if (pExpCtx->getNeedsMerge()) {
         // Metadata can't be changed on a Document. Create a MutableDocument to set the sortKey.
         MutableDocument output(Document::fromBsonWithMetaData(response.value()));
 
@@ -189,13 +190,13 @@ DocumentSource::GetNextResult DocumentSourceVectorSearch::getNextAfterSetup() {
 }
 
 DocumentSource::GetNextResult DocumentSourceVectorSearch::doGetNext() {
-    // Return EOF if pExpCtx->uuid is unset here; the collection we are searching over has not been
-    // created yet.
-    if (!pExpCtx->uuid) {
+    // Return EOF if pExpCtx->getUUID() is unset here; the collection we are searching over has not
+    // been created yet.
+    if (!pExpCtx->getUUID()) {
         return DocumentSource::GetNextResult::makeEOF();
     }
 
-    if (pExpCtx->explain &&
+    if (pExpCtx->getExplain() &&
         !feature_flags::gFeatureFlagSearchExplainExecutionStats.isEnabled(
             serverGlobalParams.featureCompatibility.acquireFCVSnapshot())) {
         return DocumentSource::GetNextResult::makeEOF();
@@ -219,7 +220,7 @@ std::list<intrusive_ptr<DocumentSource>> DocumentSourceVectorSearch::createFromB
                           << " value must be an object. Found: " << typeName(elem.type()),
             elem.type() == BSONType::Object);
 
-    auto serviceContext = expCtx->opCtx->getServiceContext();
+    auto serviceContext = expCtx->getOperationContext()->getServiceContext();
     std::list<intrusive_ptr<DocumentSource>> desugaredPipeline = {
         make_intrusive<DocumentSourceVectorSearch>(
             expCtx, executor::getMongotTaskExecutor(serviceContext), elem.embeddedObject())};
@@ -233,9 +234,10 @@ std::list<intrusive_ptr<DocumentSource>> DocumentSourceVectorSearch::createFromB
         // Only add an idLookup stage once, when we reach the mongod that will execute the pipeline.
         // Ignore the case where we have a stub 'mongoProcessInterface' because this only occurs
         // during validation/analysis, e.g. for QE and pipeline-style updates.
-        if ((expCtx->mongoProcessInterface->isExpectedToExecuteQueries() &&
-             !expCtx->mongoProcessInterface->inShardedEnvironment(expCtx->opCtx)) ||
-            OperationShardingState::isComingFromRouter(expCtx->opCtx)) {
+        if ((expCtx->getMongoProcessInterface()->isExpectedToExecuteQueries() &&
+             !expCtx->getMongoProcessInterface()->inShardedEnvironment(
+                 expCtx->getOperationContext())) ||
+            OperationShardingState::isComingFromRouter(expCtx->getOperationContext())) {
             desugaredPipeline.insert(std::next(desugaredPipeline.begin()),
                                      make_intrusive<DocumentSourceInternalSearchIdLookUp>(expCtx));
         }
@@ -246,7 +248,8 @@ std::list<intrusive_ptr<DocumentSource>> DocumentSourceVectorSearch::createFromB
 
 
 std::list<intrusive_ptr<DocumentSource>> DocumentSourceVectorSearch::desugar() {
-    auto executor = executor::getMongotTaskExecutor(pExpCtx->opCtx->getServiceContext());
+    auto executor =
+        executor::getMongotTaskExecutor(pExpCtx->getOperationContext()->getServiceContext());
 
     std::list<intrusive_ptr<DocumentSource>> desugaredPipeline = {
         make_intrusive<DocumentSourceVectorSearch>(pExpCtx, executor, _originalSpec.getOwned())};
@@ -258,8 +261,44 @@ std::list<intrusive_ptr<DocumentSource>> DocumentSourceVectorSearch::desugar() {
     return desugaredPipeline;
 }
 
+std::pair<Pipeline::SourceContainer::iterator, bool>
+DocumentSourceVectorSearch::_attemptSortAfterVectorSearchOptimization(
+    Pipeline::SourceContainer::iterator itr, Pipeline::SourceContainer* container) {
+    auto isSortOnVectorSearchMeta = [](const SortPattern& sortPattern) -> bool {
+        return isSortOnSingleMetaField(sortPattern,
+                                       (1 << DocumentMetadataFields::MetaType::kVectorSearchScore));
+    };
+    auto optItr = std::next(itr);
+    if (optItr != container->end()) {
+        if (auto sortStage = dynamic_cast<DocumentSourceSort*>(optItr->get())) {
+            // A $sort stage has been found directly after this stage.
+            // $vectorSearch results are always sorted by 'vectorSearchScore',
+            // so if the $sort stage is also sorted by 'vectorSearchScore', the $sort stage
+            // is redundant and can safely be removed.
+            if (isSortOnVectorSearchMeta(sortStage->getSortKeyPattern())) {
+                // Optimization successful.
+                container->remove(*optItr);
+                return {itr, true};  // Return the same pointer in case there are other
+                                     // optimizations to still be applied.
+            }
+        }
+    }
+
+    // Optimization not possible.
+    return {itr, false};
+}
+
 Pipeline::SourceContainer::iterator DocumentSourceVectorSearch::doOptimizeAt(
     Pipeline::SourceContainer::iterator itr, Pipeline::SourceContainer* container) {
+    // Attempt to remove a $sort on metadata after this $vectorSearch stage.
+    {
+        const auto&& [returnItr, optimizationSucceeded] =
+            _attemptSortAfterVectorSearchOptimization(itr, container);
+        if (optimizationSucceeded) {
+            return returnItr;
+        }
+    }
+
     auto stageItr = std::next(itr);
     // Only attempt to get the limit from the query if there are further stages in the pipeline.
     if (stageItr != container->end()) {

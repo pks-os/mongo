@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2020-present MongoDB, Inc.
+ *    Copyright (C) 2024-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -27,34 +27,16 @@
  *    it in the license file.
  */
 
-#include "mongo/bson/bsonelement.h"
+#pragma once
+
 #include "mongo/bson/bsonobj.h"
-#include "mongo/bson/bsonobjbuilder.h"
-#include "mongo/db/commands/server_status.h"
-#include "mongo/db/operation_context.h"
-#include "mongo/db/repl/tenant_migration_access_blocker_registry.h"
 
 namespace mongo {
+namespace query_benchmark_constants {
+extern const BSONObj kComplexPredicate;
+extern const BSONObj kComplexProjection;
 
-namespace {
-class TenantMigrationAccessBlockerServerStatus final : public ServerStatusSection {
-public:
-    using ServerStatusSection::ServerStatusSection;
-
-    bool includeByDefault() const override {
-        return true;
-    }
-    BSONObj generateSection(OperationContext* opCtx,
-                            const BSONElement& configElement) const override {
-        BSONObjBuilder result;
-        TenantMigrationAccessBlockerRegistry::get(opCtx->getServiceContext())
-            .appendInfoForServerStatus(&result);
-        return result.obj();
-    }
-};
-auto& tenantMigrationAccessBlockerServerStatus =
-    *ServerStatusSectionBuilder<TenantMigrationAccessBlockerServerStatus>(
-         "tenantMigrationAccessBlocker")
-         .forShard();
-}  // namespace
+extern const BSONObj kChangeStreamPredicate;
+extern const BSONObj kVeryComplexProjection;
+}  // namespace query_benchmark_constants
 }  // namespace mongo

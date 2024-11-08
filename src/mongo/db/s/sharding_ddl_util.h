@@ -29,17 +29,17 @@
 
 #pragma once
 
-#include <absl/container/node_hash_map.h>
-#include <boost/move/utility_core.hpp>
-#include <boost/none.hpp>
-#include <boost/optional/optional.hpp>
 #include <cstddef>
 #include <memory>
 #include <utility>
 #include <vector>
 
+#include <absl/container/node_hash_map.h>
+#include <boost/move/utility_core.hpp>
+#include <boost/none.hpp>
+#include <boost/optional/optional.hpp>
+
 #include "mongo/base/status.h"
-#include "mongo/base/status_with.h"
 #include "mongo/base/string_data.h"
 #include "mongo/bson/bsonelement.h"
 #include "mongo/bson/bsonobj.h"
@@ -150,13 +150,16 @@ std::vector<AsyncRequestsSender::Response> sendAuthenticatedCommandToShards(
                     executor::RemoteCommandResponse(
                         reply.targetUsed, replyBob.obj(), reply.elapsed)};
             })
-            .getNoThrow();
+            .getNoThrow(opCtx);
 
     if (ignoreResponses) {
         return {};
     }
 
     if (auto status = responses.getStatus(); status != Status::OK()) {
+        if (status != ErrorCodes::RemoteCommandExecutionError) {
+            uassertStatusOK(status);
+        }
         uassertStatusOK(async_rpc::unpackRPCStatus(status));
     }
 
@@ -186,9 +189,18 @@ void removeCollAndChunksMetadataFromConfig(
     const std::shared_ptr<executor::TaskExecutor>& executor = nullptr);
 
 /**
- * Delete the query analyzer documents that match the given filter.
+ * Delete the query analyzer document associated to the passed in namespace.
  */
-void removeQueryAnalyzerMetadataFromConfig(OperationContext* opCtx, const BSONObj& filter);
+void removeQueryAnalyzerMetadata(OperationContext* opCtx,
+                                 const NamespaceString& nss,
+                                 const OperationSessionInfo& osi);
+
+/**
+ * Delete the query analyzer documents associated to the passed in collection UUIDs
+ * (note: using such a type instead of NamespaceString guarantees replay protection in step down
+ * scenarios).
+ */
+void removeQueryAnalyzerMetadata(OperationContext* opCtx, const std::vector<UUID>& collectionUUIDs);
 
 /**
  * Ensures rename preconditions for collections are met:

@@ -31,6 +31,8 @@
 
 #include "mongo/db/query/cost_based_ranker/estimates.h"
 
+#include <span>
+
 namespace mongo::cost_based_ranker {
 
 /**
@@ -43,12 +45,12 @@ constexpr size_t kMaxBackoffElements = 4;
  * Estimates the selectivity of a conjunction given the selectivities of its subexpressions using
  * exponential backoff.
  */
-SelectivityEstimate conjExponentialBackoff(std::vector<SelectivityEstimate> conjSelectivities);
+SelectivityEstimate conjExponentialBackoff(std::span<SelectivityEstimate> conjSelectivities);
 
 /**
  * Estimates the selectivity of a disjunction given the selectivities of its subexpressions using
  * exponential backoff.
  */
-SelectivityEstimate disjExponentialBackoff(std::vector<SelectivityEstimate> disjSelectivities);
+SelectivityEstimate disjExponentialBackoff(std::span<SelectivityEstimate> disjSelectivities);
 
 }  // namespace mongo::cost_based_ranker

@@ -1095,7 +1095,6 @@ mongo_cc_library(
         "//src/mongo/db/query/stage_builder/sbe:gen_abt_helpers.cpp",
         "//src/mongo/db/query/stage_builder/sbe:gen_accumulator.cpp",
         "//src/mongo/db/query/stage_builder/sbe:gen_coll_scan.cpp",
-        "//src/mongo/db/query/stage_builder/sbe:gen_eexpr_helpers.cpp",
         "//src/mongo/db/query/stage_builder/sbe:gen_expression.cpp",
         "//src/mongo/db/query/stage_builder/sbe:gen_filter.cpp",
         "//src/mongo/db/query/stage_builder/sbe:gen_group.cpp",
@@ -1219,7 +1218,6 @@ mongo_cc_library(
         "//src/mongo/db/query/stage_builder/sbe:gen_abt_helpers.h",
         "//src/mongo/db/query/stage_builder/sbe:gen_accumulator.h",
         "//src/mongo/db/query/stage_builder/sbe:gen_coll_scan.h",
-        "//src/mongo/db/query/stage_builder/sbe:gen_eexpr_helpers.h",
         "//src/mongo/db/query/stage_builder/sbe:gen_expression.h",
         "//src/mongo/db/query/stage_builder/sbe:gen_filter.h",
         "//src/mongo/db/query/stage_builder/sbe:gen_helpers.h",
@@ -2756,7 +2754,6 @@ mongo_cc_library(
         "//src/mongo/db/concurrency:exception_util",
         "//src/mongo/db/repl:repl_coordinator_interface",
         "//src/mongo/db/repl:speculative_majority_read_info",
-        "//src/mongo/db/repl:tenant_migration_access_blocker",
     ],
 )
 
@@ -2942,7 +2939,6 @@ mongo_cc_library(
         "//src/mongo/db/commands:txn_cmd_request",
         "//src/mongo/db/repl:repl_server_parameters",
         "//src/mongo/db/repl:replica_set_messages",
-        "//src/mongo/db/repl:tenant_migration_access_blocker",
         "//src/mongo/db/s:sharding_runtime_d",
         "//src/mongo/db/session:session_catalog_mongod",
         "//src/mongo/db/stats:api_version_metrics",
