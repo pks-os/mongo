@@ -125,6 +125,24 @@ class Globals:
     def bazel_target(scons_node):
         return Globals.scons2bazel_targets[str(scons_node).replace("\\", "/")]["bazel_target"]
 
+    @staticmethod
+    def bazel_link_file(scons_node):
+        bazel_target = Globals.scons2bazel_targets[str(scons_node).replace("\\", "/")][
+            "bazel_target"
+        ]
+        linkfile = bazel_target.replace("//src/", "bazel-bin/src/") + "_links.list"
+        return "/".join(linkfile.rsplit(":", 1))
+
+    @staticmethod
+    def bazel_sources_file(scons_node):
+        bazel_target = Globals.scons2bazel_targets[str(scons_node).replace("\\", "/")][
+            "bazel_target"
+        ]
+        sources_file = (
+            bazel_target.replace("//src/", "bazel-bin/src/") + "_sources_list.sources_list"
+        )
+        return "/".join(sources_file.rsplit(":", 1))
+
 
 def bazel_debug(msg: str):
     pass
@@ -696,8 +714,7 @@ def auto_install_bazel(env, libdep, shlib_suffix):
     query_results = env.CheckBazelDepsCache(bazel_target)
 
     if query_results is None:
-        linkfile = bazel_target.replace("//src/", "bazel-bin/src/") + "_links.list"
-        linkfile = "/".join(linkfile.rsplit(":", 1))
+        linkfile = env["SCONS2BAZEL_TARGETS"].bazel_link_file(scons_target)
         with open(os.path.join(env.Dir("#").abspath, linkfile)) as f:
             query_results = f.read()
 
@@ -750,10 +767,7 @@ def auto_archive_bazel(env, node, already_archived, search_stack):
         scons_target = str(bazel_child).replace(
             f"{env['BAZEL_OUT_DIR']}/src", env.Dir("$BUILD_DIR").path
         )
-        bazel_target = env["SCONS2BAZEL_TARGETS"].bazel_target(scons_target)
-
-        linkfile = bazel_target.replace("//src/", "bazel-bin/src/") + "_links.list"
-        linkfile = "/".join(linkfile.rsplit(":", 1))
+        linkfile = env["SCONS2BAZEL_TARGETS"].bazel_link_file(scons_target)
 
         with open(os.path.join(env.Dir("#").abspath, linkfile)) as f:
             query_results = f.read()
@@ -1114,7 +1128,7 @@ def generate(env: SCons.Environment.Environment) -> None:
         bazel_internal_flags.extend(formatted_options)
 
     if normalized_arch not in ["arm64", "amd64"]:
-        bazel_internal_flags.append("--config=local")
+        bazel_internal_flags.append("--config=no-remote-exec")
     elif os.environ.get("USE_NATIVE_TOOLCHAIN"):
         print("Custom toolchain detected, using --config=local for bazel build.")
         bazel_internal_flags.append("--config=local")
@@ -1123,6 +1137,10 @@ def generate(env: SCons.Environment.Environment) -> None:
         # s390x systems don't have enough RAM to handle the default job count and will
         # OOM unless we reduce it.
         bazel_internal_flags.append("--jobs=3")
+    elif normalized_arch == "ppc64le":
+        # ppc64le builds are OOMing with default concurrency, but it's not clear if it's
+        # an issue with the bazel client itself or in the compiler.
+        bazel_internal_flags.append("--jobs=32")
 
     public_release = False
     # Disable remote execution for public release builds.

@@ -50,6 +50,7 @@ mongo_cc_library(
         "find_cmd_shape.h",
         "query_shape.h",
         "shape_helpers.h",
+        "//src/mongo/db/pipeline:aggregate_command_gen",
     ],
     deps = [
         ":query_shape_common",
@@ -84,4 +85,10 @@ mongo_cc_library(
     deps = [
         "//src/mongo/crypto:sha256_block",
     ],
+)
+
+# TODO(SERVER-96861): Remove cycle created by moving //src/mongo/db/query/query_shape:serialization_options.h to //src/mongo/db/query/query_shape:query_shape_common
+filegroup(
+    name = "serialization_options_hdrs",
+    srcs = [":serialization_options.h"],
 )

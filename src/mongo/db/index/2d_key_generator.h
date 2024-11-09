@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2020-present MongoDB, Inc.
+ *    Copyright (C) 2024-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -27,28 +27,24 @@
  *    it in the license file.
  */
 
-#include "mongo/db/repl/tenant_migration_conflict_info.h"
-#include "mongo/base/init.h"  // IWYU pragma: keep
-#include "mongo/base/string_data.h"
+#pragma once
 
-namespace mongo {
+#include "mongo/bson/bsonobj.h"
+#include "mongo/db/index/2d_common.h"
+#include "mongo/db/record_id.h"
+#include "mongo/db/storage/key_string/key_string.h"
+#include "mongo/util/shared_buffer_fragment.h"
 
-namespace {
+namespace mongo::index2d {
 
-MONGO_INIT_REGISTER_ERROR_EXTRA_INFO(TenantMigrationConflictInfo);
-MONGO_INIT_REGISTER_ERROR_EXTRA_INFO(NonRetryableTenantMigrationConflictInfo);
-
-constexpr StringData kMigrationIdFieldName = "migrationId"_sd;
-
-}  // namespace
-
-void TenantMigrationConflictInfoBase::serialize(BSONObjBuilder* bob) const {
-    _migrationId.appendToBuilder(bob, kMigrationIdFieldName);
-}
-
-std::shared_ptr<const ErrorExtraInfo> TenantMigrationConflictInfoBase::parse(const BSONObj& obj) {
-    auto uuid = uassertStatusOK(UUID::parse(obj[kMigrationIdFieldName]));
-    return std::make_shared<TenantMigrationConflictInfoBase>(std::move(uuid));
-}
-
-}  // namespace mongo
+/**
+ * Generates keys for 2d access method, used for 2d index type.
+ */
+void get2DKeys(SharedBufferFragmentBuilder& pooledBufferBuilder,
+               const BSONObj& obj,
+               const TwoDIndexingParams& params,
+               KeyStringSet* keys,
+               key_string::Version keyStringVersion,
+               Ordering ordering,
+               const boost::optional<RecordId>& id = boost::none);
+}  // namespace mongo::index2d

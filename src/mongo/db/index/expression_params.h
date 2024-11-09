@@ -39,23 +39,10 @@
 namespace mongo {
 
 class CollatorInterface;
-struct TwoDIndexingParams;
-struct S2IndexingParams;
 
 namespace ExpressionParams {
 
-void parseTwoDParams(const BSONObj& infoObj, TwoDIndexingParams* out);
-
 void parseHashParams(const BSONObj& infoObj, int* versionOut, BSONObj* keyPattern);
-
-void parseHaystackParams(const BSONObj& infoObj,
-                         std::string* geoFieldOut,
-                         std::vector<std::string>* otherFieldsOut,
-                         double* bucketSizeOut);
-
-void initialize2dsphereParams(const BSONObj& infoObj,
-                              const CollatorInterface* collator,
-                              S2IndexingParams* out);
 
 }  // namespace ExpressionParams
 

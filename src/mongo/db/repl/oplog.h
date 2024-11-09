@@ -76,12 +76,12 @@ public:
     explicit InsertStatement(BSONObj toInsert) : doc(std::move(toInsert)) {}
 
     InsertStatement(std::vector<StmtId> statementIds, BSONObj toInsert)
-        : stmtIds(statementIds), doc(std::move(toInsert)) {}
+        : stmtIds(std::move(statementIds)), doc(std::move(toInsert)) {}
     InsertStatement(StmtId stmtId, BSONObj toInsert)
         : InsertStatement(std::vector<StmtId>{stmtId}, std::move(toInsert)) {}
 
     InsertStatement(std::vector<StmtId> statementIds, BSONObj toInsert, OplogSlot os)
-        : stmtIds(statementIds), oplogSlot(std::move(os)), doc(std::move(toInsert)) {}
+        : stmtIds(std::move(statementIds)), oplogSlot(std::move(os)), doc(std::move(toInsert)) {}
     InsertStatement(StmtId stmtId, BSONObj toInsert, OplogSlot os)
         : InsertStatement(std::vector<StmtId>{stmtId}, std::move(toInsert), std::move(os)) {}
 
@@ -261,7 +261,6 @@ void logOplogConstraintViolation(OperationContext* opCtx,
 /**
  * Used for applying from an oplog entry or grouped inserts.
  * @param opOrGroupedInserts a single oplog entry or grouped inserts to be applied.
- * @param alwaysUpsert convert some updates to upserts for idempotency reasons
  * @param mode specifies what oplog application mode we are in
  * @param incrementOpsAppliedStats is called whenever an op is applied.
  * Returns failure status if the op was an update that could not be applied.
