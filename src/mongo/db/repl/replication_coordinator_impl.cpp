@@ -102,7 +102,6 @@
 #include "mongo/db/repl/replication_process.h"
 #include "mongo/db/repl/replication_recovery.h"
 #include "mongo/db/repl/storage_interface.h"
-#include "mongo/db/repl/tenant_migration_decoration.h"
 #include "mongo/db/repl/transaction_oplog_application.h"
 #include "mongo/db/repl/update_position_args.h"
 #include "mongo/db/replica_set_endpoint_sharding_state.h"
@@ -2461,9 +2460,9 @@ ReplicationCoordinator::StatusAndDuration ReplicationCoordinatorImpl::awaitRepli
 
     // If we get a timeout error and the opCtx deadline is >= the writeConcern wtimeout, then we
     // know the timeout was due to wtimeout (not opCtx deadline) and thus we return
-    // ErrorCodes::WriteConcernFailed.
+    // ErrorCodes::WriteConcernTimeout.
     if (status.code() == timeoutError && opCtxDeadline >= wTimeoutDate) {
-        status = Status{ErrorCodes::WriteConcernFailed, "waiting for replication timed out"};
+        status = Status{ErrorCodes::WriteConcernTimeout, "waiting for replication timed out"};
     }
 
     if (TestingProctor::instance().isEnabled() && !status.isOK()) {
@@ -3622,7 +3621,7 @@ bool ReplicationCoordinatorImpl::isInPrimaryOrSecondaryState_UNSAFE() const {
 bool ReplicationCoordinatorImpl::shouldRelaxIndexConstraints(OperationContext* opCtx,
                                                              const NamespaceString& ns) {
     if (storageGlobalParams.magicRestore || ReplSettings::shouldRecoverFromOplogAsStandalone() ||
-        !recoverToOplogTimestamp.empty() || tenantMigrationInfo(opCtx)) {
+        !recoverToOplogTimestamp.empty()) {
         return true;
     }
     return !canAcceptWritesFor(opCtx, ns);
