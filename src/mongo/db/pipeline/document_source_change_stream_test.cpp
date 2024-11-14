@@ -201,7 +201,7 @@ struct MockMongoInterface final : public ExecutableStubMongoProcessInterface {
     boost::optional<Document> lookupSingleDocument(
         const boost::intrusive_ptr<ExpressionContext>& expCtx,
         const NamespaceString& nss,
-        boost::optional<UUID> collectionUUID,
+        UUID collectionUUID,
         const Document& documentKey,
         boost::optional<BSONObj> readConcern) final {
         Matcher matcher(documentKey.toBson(), expCtx);
@@ -4721,50 +4721,6 @@ TEST_F(ChangeStreamStageTestNoSetup, RedactDocumentSourceChangeStreamTransformMo
                 .literalPolicy = LiteralSerializationPolicy::kToRepresentativeParseableValue})
             .getDocument()
             .toBson());
-}
-
-// For DocumentSource types which contain an arbitrarily internal
-// MatchExpression, we don't want match the entire structure. This
-// assertion allows us to check some basic structure.
-void assertRedactedMatchExpressionContainsOperatorsAndRedactedFieldPaths(BSONElement el) {
-    // Walk the redacted BSON and assert that we have some ops and
-    // redacted field paths.
-    auto opCount = 0;
-    auto redactedFieldPaths = 0;
-    while (true) {
-        if (el.type() == mongo::Array) {
-            auto array = el.Array();
-            if (array.empty()) {
-                break;
-            }
-            el = array[0];
-        } else if (el.type() == mongo::Object) {
-            auto obj = el.Obj();
-            if (obj.begin() == obj.end()) {
-                break;
-            }
-            el = obj.firstElement();
-
-            // Field name should be an operator or a redacted field path.
-            if (el.fieldName()[0] == '$') {
-                opCount++;
-            } else if (!strcmp(el.fieldName(), "$regularExpression")) {
-                opCount++;
-                // Skip $regularExpression.
-                continue;
-            } else {
-                if (strstr(el.fieldName(), "HASH<") != el.fieldName()) {
-                    FAIL(std::string("Expected redacted field path: ") + el.fieldName());
-                }
-                redactedFieldPaths++;
-            }
-        } else {
-            break;
-        }
-    }
-
-    ASSERT(opCount > 0);
-    ASSERT(redactedFieldPaths > 0);
 }
 
 TEST_F(ChangeStreamStageTestNoSetup,

@@ -101,7 +101,7 @@ template <typename T>
 NamespaceString makeNamespace(const T& t, const std::string& suffix = "") {
     return NamespaceString::createNamespaceString_forTest(
         std::string("local." + t.getSuiteName() + "_" + t.getTestName())
-            .substr(0, NamespaceString::MaxNsCollectionLen - suffix.length()) +
+            .substr(0, NamespaceString::MaxUserNsCollectionLen - suffix.length()) +
         suffix);
 }
 
@@ -193,13 +193,6 @@ int64_t getIndexKeyCount(OperationContext* opCtx,
     return cat->getEntry(desc)->accessMethod()->numKeys(opCtx);
 }
 
-std::vector<InsertStatement> transformInserts(std::vector<BSONObj> docs) {
-    std::vector<InsertStatement> inserts(docs.size());
-    std::transform(docs.cbegin(), docs.cend(), inserts.begin(), [](const BSONObj& doc) {
-        return InsertStatement(doc);
-    });
-    return inserts;
-}
 std::vector<InsertStatement> transformInserts(std::vector<TimestampedBSONObj> docs) {
     std::vector<InsertStatement> inserts(docs.size());
     std::transform(docs.cbegin(), docs.cend(), inserts.begin(), [](const TimestampedBSONObj& doc) {

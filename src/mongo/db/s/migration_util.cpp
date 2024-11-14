@@ -210,13 +210,12 @@ void refreshFilteringMetadataUntilSuccess(OperationContext* opCtx, const Namespa
 }
 
 BSONObj getQueryFilterForRangeDeletionTask(const UUID& collectionUuid, const ChunkRange& range) {
-    return BSON(RangeDeletionTask::kCollectionUuidFieldName
-                << collectionUuid << RangeDeletionTask::kRangeFieldName + "." + ChunkRange::kMinKey
-                << range.getMin() << RangeDeletionTask::kRangeFieldName + "." + ChunkRange::kMaxKey
-                << range.getMax());
+    return BSON(
+        RangeDeletionTask::kCollectionUuidFieldName
+        << collectionUuid << RangeDeletionTask::kRangeFieldName + "." + ChunkRange::kMinFieldName
+        << range.getMin() << RangeDeletionTask::kRangeFieldName + "." + ChunkRange::kMaxFieldName
+        << range.getMax());
 }
-
-
 }  // namespace
 
 std::shared_ptr<executor::ThreadPoolTaskExecutor> getMigrationUtilExecutor(
@@ -224,6 +223,7 @@ std::shared_ptr<executor::ThreadPoolTaskExecutor> getMigrationUtilExecutor(
     return migrationUtilExecutorDecoration(serviceContext).getExecutor();
 }
 
+namespace {
 BSONObjBuilder _makeMigrationStatusDocumentCommon(const NamespaceString& nss,
                                                   const ShardId& fromShard,
                                                   const ShardId& toShard,
@@ -239,6 +239,7 @@ BSONObjBuilder _makeMigrationStatusDocumentCommon(const NamespaceString& nss,
                    NamespaceStringUtil::serialize(nss, SerializationContext::stateDefault()));
     return builder;
 }
+}  // namespace
 
 BSONObj makeMigrationStatusDocumentSource(
     const NamespaceString& nss,
@@ -314,14 +315,6 @@ ChunkRange extendOrTruncateBoundsForMetadata(const CollectionMetadata& metadata,
     } else {
         return range;
     }
-}
-
-bool deletionTaskUuidMatchesFilteringMetadataUuid(
-    OperationContext* opCtx,
-    const boost::optional<mongo::CollectionMetadata>& optCollDescr,
-    const RangeDeletionTask& deletionTask) {
-    return optCollDescr && optCollDescr->isSharded() &&
-        optCollDescr->uuidMatches(deletionTask.getCollectionUuid());
 }
 
 void persistMigrationCoordinatorLocally(OperationContext* opCtx,

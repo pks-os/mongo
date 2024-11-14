@@ -31,16 +31,12 @@
 #include <boost/optional/optional.hpp>
 #include <fmt/format.h>
 // IWYU pragma: no_include "ext/alloc_traits.h"
-#include <algorithm>
 #include <cstdint>
-#include <functional>
 #include <initializer_list>
 #include <limits>
-#include <memory>
 #include <ostream>
 #include <string>
 #include <utility>
-#include <variant>
 #include <vector>
 
 #include "mongo/base/status_with.h"
@@ -63,21 +59,16 @@
 #include "mongo/db/concurrency/lock_manager_defs.h"
 #include "mongo/db/index/index_access_method.h"
 #include "mongo/db/operation_context.h"
-#include "mongo/db/record_id.h"
 #include "mongo/db/repl/oplog.h"
 #include "mongo/db/repl/optime.h"
 #include "mongo/db/repl/storage_interface.h"
 #include "mongo/db/service_context.h"
-#include "mongo/db/service_context_d_test_fixture.h"
-#include "mongo/db/storage/index_entry_comparison.h"
 #include "mongo/db/storage/key_string/key_string.h"
 #include "mongo/db/storage/record_store.h"
 #include "mongo/db/storage/recovery_unit.h"
 #include "mongo/db/storage/sorted_data_interface.h"
 #include "mongo/db/storage/sorted_data_interface_test_assert.h"
 #include "mongo/db/storage/write_unit_of_work.h"
-#include "mongo/idl/server_parameter_test_util.h"
-#include "mongo/stdx/thread.h"
 #include "mongo/unittest/assert.h"
 #include "mongo/unittest/framework.h"
 #include "mongo/util/assert_util.h"
@@ -300,19 +291,6 @@ TEST_F(CollectionValidationDiskTest, ValidateIndexDetailResultsSurfaceVerifyErro
 }
 
 /**
- * Waits for a parallel running collection validation operation to start and then hang at a
- * failpoint.
- *
- * A failpoint in the validate() code should have been set prior to calling this function.
- */
-void waitUntilValidateFailpointHasBeenReached() {
-    while (!CollectionValidation::getIsValidationPausedForTest()) {
-        sleepmillis(100);  // a fairly arbitrary sleep period.
-    }
-    ASSERT(CollectionValidation::getIsValidationPausedForTest());
-}
-
-/**
  * Generates a KeyString suitable for positioning a cursor at the beginning of an index.
  */
 key_string::Value makeFirstKeyString(const SortedDataInterface& sortedDataInterface) {
@@ -321,21 +299,6 @@ key_string::Value makeFirstKeyString(const SortedDataInterface& sortedDataInterf
                                               sortedDataInterface.getOrdering(),
                                               key_string::Discriminator::kExclusiveBefore);
     return firstKeyStringBuilder.getValueCopy();
-}
-
-/**
- * Extracts KeyString without RecordId.
- */
-key_string::Value makeKeyStringWithoutRecordId(const key_string::Value& keyStringWithRecordId,
-                                               key_string::Version version) {
-    BufBuilder bufBuilder;
-    keyStringWithRecordId.serializeWithoutRecordIdLong(bufBuilder);
-    auto builderSize = bufBuilder.len();
-
-    auto buffer = bufBuilder.release();
-
-    BufReader bufReader(buffer.get(), builderSize);
-    return key_string::Value::deserialize(bufReader, version, boost::none /* ridFormat */);
 }
 
 // Verify calling validate() on a collection with old (pre-4.2) keys in a WT unique index.

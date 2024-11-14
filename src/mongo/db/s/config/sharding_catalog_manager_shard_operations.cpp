@@ -865,11 +865,6 @@ StatusWith<std::vector<CollectionType>> ShardingCatalogManager::_getCollListFrom
                         continue;
                     }
 
-                    uassert(ErrorCodes::InvalidNamespace,
-                            str::stream()
-                                << "Namespace too long. Namespace: " << nss.toStringForErrorMsg()
-                                << " Max: " << NamespaceString::MaxNsShardedCollectionLen,
-                            nss.size() <= NamespaceString::MaxNsShardedCollectionLen);
                     auto coll = CollectionType(nss,
                                                OID::gen(),
                                                Timestamp(Date_t::now()),
@@ -1335,6 +1330,7 @@ void ShardingCatalogManager::addConfigShard(OperationContext* opCtx) {
     uassertStatusOK(addShard(opCtx, &shardName, configConnString, true));
 }
 
+namespace {
 boost::optional<RemoveShardProgress> checkCollectionsAreEmpty(
     OperationContext* opCtx, const std::vector<NamespaceString>& collections) {
     for (const auto& nss : collections) {
@@ -1354,6 +1350,7 @@ boost::optional<RemoveShardProgress> checkCollectionsAreEmpty(
 
     return boost::none;
 }
+}  // namespace
 
 RemoveShardProgress ShardingCatalogManager::removeShard(OperationContext* opCtx,
                                                         const ShardId& shardId) {

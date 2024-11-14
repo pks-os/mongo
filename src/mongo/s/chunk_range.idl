@@ -31,7 +31,7 @@
 global:
     cpp_namespace: "mongo"
     cpp_includes:
-        - "mongo/s/catalog/type_chunk.h"
+        - "mongo/s/catalog/type_chunk_range.h"
 
 imports:
     - "mongo/db/basic_types.idl"
@@ -45,6 +45,6 @@ types:
         bson_serialization_type: object
         cpp_type: "mongo::ChunkRange"
         serializer: "mongo::ChunkRange::toBSON"
-        deserializer: "mongo::ChunkRange::fromBSONThrowing"
+        deserializer: "mongo::ChunkRange::fromBSON"
         # Deserializer uses getOwned.
         is_view: false

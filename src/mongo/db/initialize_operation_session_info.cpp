@@ -66,7 +66,6 @@ bool isAuthorizedForInternalClusterAction(OperationContext* opCtx,
     }
     return *cachedResult;
 }
-}  // namespace
 
 /**
  * A client is internal if the connection is a self connection, a connection from a mongos or
@@ -76,6 +75,7 @@ bool isInternalClient(OperationContext* opCtx) {
     return !opCtx->getClient()->session() || opCtx->getClient()->isInternalClient() ||
         opCtx->getClient()->isInDirectClient();
 }
+}  // namespace
 
 OperationSessionInfoFromClient initializeOperationSessionInfo(
     OperationContext* opCtx,
@@ -206,13 +206,13 @@ OperationSessionInfoFromClient initializeOperationSessionInfo(
     if (osi.getTxnNumber()) {
         if (!osi.getAutocommit()) {
             if (isInternalClient(opCtx)) {
-                internalRetryableWriteCount.increment(1);
+                getQueryCounters(opCtx).internalRetryableWriteCount.increment(1);
             } else {
-                externalRetryableWriteCount.increment(1);
+                getQueryCounters(opCtx).externalRetryableWriteCount.increment(1);
             }
         } else {
             if (osi.getSessionId()->getTxnNumber() && osi.getSessionId()->getTxnUUID()) {
-                retryableInternalTransactionCount.increment(1);
+                getQueryCounters(opCtx).retryableInternalTransactionCount.increment(1);
             }
         }
     }

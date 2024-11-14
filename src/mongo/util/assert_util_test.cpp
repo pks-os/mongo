@@ -541,15 +541,13 @@ DEATH_TEST(ScopedDebugInfo, PrintedOnInvariant, "mission: ATestInjectedString") 
     someRiskyBusiness();
 }
 
-void causeSegFault() {
-    int* ptr = nullptr;
-    *ptr = 10;
-}
-
+// The following test relies on SIGSEGV which is not supported on Windows.
+#if !defined(_WIN32)
 DEATH_TEST(ScopedDebugInfo, PrintedOnSignal, "mission: ATestInjectedString") {
     ScopedDebugInfo g("mission", "ATestInjectedString");
-    causeSegFault();
+    raise(SIGSEGV);
 }
+#endif
 
 void mustNotCompile() {
 #if 0

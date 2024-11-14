@@ -258,11 +258,13 @@ CreateCommand makeCreateCommand(OperationContext* opCtx,
     return cmd;
 }
 
+namespace {
 CollectionOptions makeCollectionOptions(OperationContext* opCtx,
                                         const ShardsvrCreateCollectionRequest& request) {
     return CollectionOptions::fromCreateCommand(
         create_collection_util::makeCreateCommand(opCtx, {}, request));
 }
+}  // namespace
 }  // namespace create_collection_util
 
 namespace {
@@ -959,11 +961,7 @@ void checkCommandArguments(OperationContext* opCtx,
                 "Sharding a buckets collection is not allowed",
                 !originalNss.isTimeseriesBucketsCollection());
 
-        uassert(ErrorCodes::InvalidNamespace,
-                str::stream() << "Namespace too long. Namespace: "
-                              << originalNss.toStringForErrorMsg()
-                              << " Max: " << NamespaceString::MaxNsShardedCollectionLen,
-                originalNss.size() <= NamespaceString::MaxNsShardedCollectionLen);
+        sharding_ddl_util::assertNamespaceLengthLimit(originalNss, request.getUnsplittable());
     }
 }
 
@@ -1456,11 +1454,10 @@ TranslatedRequestParams CreateCollectionCoordinatorLegacy::_translateRequestPara
     if (targetingStandardCollection) {
         const auto& resolvedNamespace = originalNss();
         performCheckOnCollectionUUID(resolvedNamespace);
-        uassert(ErrorCodes::InvalidNamespace,
-                str::stream() << "Namespace too long. Namespace: "
-                              << resolvedNamespace.toStringForErrorMsg()
-                              << " Max: " << NamespaceString::MaxNsShardedCollectionLen,
-                resolvedNamespace.size() <= NamespaceString::MaxNsShardedCollectionLen);
+
+        sharding_ddl_util::assertNamespaceLengthLimit(resolvedNamespace,
+                                                      _request.getUnsplittable());
+
         return makeTranslateRequestParams(
             resolvedNamespace,
             *_request.getShardKey(),
@@ -1477,11 +1474,7 @@ TranslatedRequestParams CreateCollectionCoordinatorLegacy::_translateRequestPara
     const auto& resolvedNamespace = bucketsNs;
     performCheckOnCollectionUUID(resolvedNamespace);
 
-    uassert(ErrorCodes::InvalidNamespace,
-            str::stream() << "Namespace too long. Namespace: "
-                          << resolvedNamespace.toStringForErrorMsg()
-                          << " Max: " << NamespaceString::MaxNsShardedCollectionLen,
-            resolvedNamespace.size() <= NamespaceString::MaxNsShardedCollectionLen);
+    sharding_ddl_util::assertNamespaceLengthLimit(resolvedNamespace, _request.getUnsplittable());
 
     // Consolidate the related request parameters...
     auto existingTimeseriesOptions = [&bucketsNs, &existingBucketsColl] {
@@ -2171,11 +2164,7 @@ void CreateCollectionCoordinator::_translateRequestParameters() {
         }
     }
 
-    uassert(ErrorCodes::InvalidNamespace,
-            str::stream() << "Namespace too long. Namespace: " << targetNs.toStringForErrorMsg()
-                          << " has length " << targetNs.size() << " but max lenth is "
-                          << NamespaceString::MaxNsShardedCollectionLen,
-            targetNs.size() <= NamespaceString::MaxNsShardedCollectionLen);
+    sharding_ddl_util::assertNamespaceLengthLimit(targetNs, _request.getUnsplittable());
 
     const auto resolvedCollator =
         resolveCollationForUserQueries(opCtx,

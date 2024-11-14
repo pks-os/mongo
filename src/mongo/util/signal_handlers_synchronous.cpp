@@ -224,24 +224,27 @@ void logNoRecursion(StringData message) {
     }
 }
 
-void writeMallocFreeStreamToLog(const MallocFreeOStreamGuard&) {
+// must hold MallocFreeOStreamGuard to call
+void writeMallocFreeStreamToLog() {
     mallocFreeOStream << "\n";
     logNoRecursion(mallocFreeOStream.str());
     mallocFreeOStream.rewind();
 }
 
-void printStackTraceNoRecursion(const MallocFreeOStreamGuard& lk) {
+// must hold MallocFreeOStreamGuard to call
+void printStackTraceNoRecursion() {
     if (logv2::loggingInProgress()) {
         printStackTrace(mallocFreeOStream);
-        writeMallocFreeStreamToLog(lk);
+        writeMallocFreeStreamToLog();
     } else {
         printStackTrace();
     }
 }
 
-void printSignal(const MallocFreeOStreamGuard& lk, int signalNum) {
+// must hold MallocFreeOStreamGuard to call
+void printSignal(int signalNum) {
     mallocFreeOStream << "Got signal: " << signalNum << " (" << strsignal(signalNum) << ").";
-    writeMallocFreeStreamToLog(lk);
+    writeMallocFreeStreamToLog();
 }
 
 void dumpScopedDebugInfo(std::ostream& os) {
@@ -257,11 +260,12 @@ void dumpScopedDebugInfo(std::ostream& os) {
     os << "]\n";
 }
 
-void printErrorBlock(const MallocFreeOStreamGuard& lk) {
-    printStackTraceNoRecursion(lk);
-    writeMallocFreeStreamToLog(lk);
+// must hold MallocFreeOStreamGuard to call
+void printErrorBlock() {
+    printStackTraceNoRecursion();
+    writeMallocFreeStreamToLog();
     dumpScopedDebugInfo(mallocFreeOStream);
-    writeMallocFreeStreamToLog(lk);
+    writeMallocFreeStreamToLog();
 }
 
 // this will be called in certain c++ error cases, for example if there are two active
@@ -271,21 +275,22 @@ void myTerminate() {
     mallocFreeOStream << "terminate() called.";
     if (std::current_exception()) {
         mallocFreeOStream << " An exception is active; attempting to gather more information";
-        writeMallocFreeStreamToLog(lk);
+        writeMallocFreeStreamToLog();
         globalActiveExceptionWitness().describe(mallocFreeOStream);
     } else {
         mallocFreeOStream << " No exception is active";
     }
-    writeMallocFreeStreamToLog(lk);
-    printErrorBlock(lk);
+    writeMallocFreeStreamToLog();
+    printErrorBlock();
     breakpoint();
     endProcessWithSignal(SIGABRT);
 }
 
+extern "C" void abruptQuit(int signalNum);
 extern "C" void abruptQuit(int signalNum) {
     MallocFreeOStreamGuard lk(signalNum);
-    printSignal(lk, signalNum);
-    printErrorBlock(lk);
+    printSignal(signalNum);
+    printErrorBlock();
     breakpoint();
     endProcessWithSignal(signalNum);
 }
@@ -312,11 +317,13 @@ void myPureCallHandler() {
 
 #else
 
+extern "C" void abruptQuitAction(int signalNum, siginfo_t*, void*);
 extern "C" void abruptQuitAction(int signalNum, siginfo_t*, void*) {
     abruptQuit(signalNum);
 };
 
-void printSigInfo(const MallocFreeOStreamGuard& lk, const siginfo_t* siginfo) {
+// Must hold MallocFreeOStreamGuard to call
+void printSigInfo(const siginfo_t* siginfo) {
     if (siginfo == nullptr) {
         return;
     }
@@ -324,9 +331,10 @@ void printSigInfo(const MallocFreeOStreamGuard& lk, const siginfo_t* siginfo) {
     mallocFreeOStream << "Dumping siginfo (si_code=" << siginfo->si_code
                       << "): " << streamableHexdump(*siginfo);
 
-    writeMallocFreeStreamToLog(lk);
+    writeMallocFreeStreamToLog();
 }
 
+extern "C" void abruptQuitWithAddrSignal(int signalNum, siginfo_t* siginfo, void* ucontext_erased);
 extern "C" void abruptQuitWithAddrSignal(int signalNum, siginfo_t* siginfo, void* ucontext_erased) {
     // For convenient debugger access.
     [[maybe_unused]] auto ucontext = static_cast<const ucontext_t*>(ucontext_erased);
@@ -339,11 +347,11 @@ extern "C" void abruptQuitWithAddrSignal(int signalNum, siginfo_t* siginfo, void
     // Writing out message to log separate from the stack trace so at least that much gets
     // logged. This is important because we may get here by jumping to an invalid address which
     // could cause unwinding the stack to break.
-    writeMallocFreeStreamToLog(lk);
+    writeMallocFreeStreamToLog();
 
-    printSigInfo(lk, siginfo);
-    printSignal(lk, signalNum);
-    printErrorBlock(lk);
+    printSigInfo(siginfo);
+    printSignal(signalNum);
+    printErrorBlock();
 
     breakpoint();
     endProcessWithSignal(signalNum);
@@ -409,8 +417,8 @@ void setupSynchronousSignalHandlers() {
 void reportOutOfMemoryErrorAndExit() {
     MallocFreeOStreamGuard lk(SIGABRT);
     mallocFreeOStream << "out of memory.";
-    writeMallocFreeStreamToLog(lk);
-    printStackTraceNoRecursion(lk);
+    writeMallocFreeStreamToLog();
+    printStackTraceNoRecursion();
     quickExit(ExitCode::abrupt);
 }
 

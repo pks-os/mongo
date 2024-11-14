@@ -40,9 +40,7 @@
 
 #include "mongo/base/data_type_endian.h"
 #include "mongo/base/static_assert.h"
-#include "mongo/base/string_data.h"
 #include "mongo/config.h"  // IWYU pragma: keep
-#include "mongo/db/pipeline/skip_and_limit.h"
 #include "mongo/db/sorter/sorter.h"
 #include "mongo/logv2/log.h"
 #include "mongo/platform/random.h"
@@ -64,7 +62,7 @@ namespace mongo {
  * atomic variable. This is necessary because the sorter.cpp code is separately included in multiple
  * places, rather than compiled in one place and linked, and so cannot provide a globally unique ID.
  */
-std::string nextFileName() {
+static std::string nextFileName() {
     static AtomicWord<unsigned> sorterTestFileCounter;
     return "extsort-sorter-test." + std::to_string(sorterTestFileCounter.fetchAndAdd(1));
 }
@@ -78,8 +76,8 @@ std::string nextFileName() {
 
 
 namespace mongo {
-namespace sorter {
 namespace {
+namespace sorter {
 
 //
 // Sorter framework testing utilities
@@ -1986,8 +1984,8 @@ TEST_F(BoundedSorterTest, CompoundSpill) {
     ASSERT_EQ(sorter->stats().spilledRanges(), 1);
 }
 
-}  // namespace
 }  // namespace sorter
+}  // namespace
 }  // namespace mongo
 
 template class ::mongo::Sorter<::mongo::sorter::BoundedSorterTest::Key,

@@ -320,6 +320,7 @@ BulkWriteReplyInfo processFLEResponse(const BatchedCommandRequest& request,
     return replyInfo;
 }
 
+namespace {
 BatchedCommandRequest makeFLECommandRequest(OperationContext* opCtx,
                                             const BulkWriteCommandRequest& clientRequest,
                                             const std::vector<BulkWriteOpVariant>& ops) {
@@ -364,6 +365,7 @@ BatchedCommandRequest makeFLECommandRequest(OperationContext* opCtx,
         return BatchedCommandRequest(deleteCommand);
     }
 }
+}  // namespace
 
 void BulkWriteExecStats::noteTargetedShard(const BulkWriteCommandRequest& clientRequest,
                                            const TargetedWriteBatch& targetedBatch) {
@@ -478,6 +480,7 @@ std::pair<FLEBatchResult, BulkWriteReplyInfo> attemptExecuteFLE(
     }
 }
 
+namespace {
 void executeRetryableTimeseriesUpdate(OperationContext* opCtx,
                                       TargetedBatchMap& childBatches,
                                       BulkWriteOp& bulkWriteOp) {
@@ -725,6 +728,7 @@ void coordinateMultiUpdate(OperationContext* opCtx,
         ShardWCError(childBatches.begin()->first, WriteConcernErrorDetail{}),
         bulkWriteResponse.getRetriedStmtIds());
 }
+}  // namespace
 
 BulkWriteReplyInfo execute(OperationContext* opCtx,
                            const std::vector<std::unique_ptr<NSTargeter>>& targeters,
@@ -1171,6 +1175,7 @@ void BulkWriteOp::noteErrorForRemainingWrites(const Status& status) {
     dassert(isFinished());
 }
 
+namespace {
 /**
  * Checks if an error reply has the TransientTransactionError label. We use this in cases where we
  * want to defer to whether a shard attached the label to an error it gave us.
@@ -1254,6 +1259,7 @@ std::vector<BulkWriteReplyItem> exhaustCursorForReplyItems(
 
     return result;
 }
+}  // namespace
 
 void BulkWriteOp::processChildBatchResponseFromRemote(
     const TargetedWriteBatch& writeBatch,
@@ -1326,13 +1332,13 @@ void BulkWriteOp::noteWriteOpResponse(const std::unique_ptr<TargetedWrite>& targ
         // Since the write is either an update or a delete, summing these two values gives us the
         // correct value of 'n'.
         auto n = commandReply.getNMatched() + commandReply.getNDeleted();
-        op.noteWriteWithoutShardKeyWithIdResponse(*targetedWrite, n, numOps, replyItem);
+        op.noteWriteWithoutShardKeyWithIdResponse(_opCtx, *targetedWrite, n, numOps, replyItem);
 
         if (op.getWriteState() == WriteOpState_Completed) {
             _shouldStopCurrentRound = true;
         }
     } else {
-        op.noteWriteComplete(*targetedWrite, replyItem);
+        op.noteWriteComplete(_opCtx, *targetedWrite, replyItem);
     }
 }
 
@@ -1401,7 +1407,7 @@ void BulkWriteOp::noteChildBatchResponse(
             tassert(8266002,
                     "bulkWrite should not see replies after an error when ordered:true",
                     replyIndex >= (int)replyItems.size());
-            writeOp.resetWriteToReady();
+            writeOp.resetWriteToReady(_opCtx);
             continue;
         }
 
@@ -1482,7 +1488,7 @@ void BulkWriteOp::noteChildBatchResponse(
             noteWriteOpResponse(write, writeOp, commandReply, targetedBatch.getNumOps(), reply);
         } else {
             lastError.emplace(write->writeOpRef.first, reply.getStatus());
-            writeOp.noteWriteError(*write, *lastError);
+            writeOp.noteWriteError(_opCtx, *write, *lastError);
 
             auto origWrite = BulkWriteCRUDOp(_clientRequest.getOps()[write->writeOpRef.first]);
             auto nss = _clientRequest.getNsInfo()[origWrite.getNsInfoIdx()].getNs();
@@ -1622,7 +1628,7 @@ void BulkWriteOp::noteWriteOpFinalResponse(
     WriteOp& writeOp = _writeOps[opIdx];
 
     // Cancel all childOps if any.
-    writeOp.resetWriteToReady();
+    writeOp.resetWriteToReady(_opCtx);
 
     if (!shardWCError.error.toStatus().isOK()) {
         saveWriteConcernError(shardWCError);
@@ -1871,7 +1877,7 @@ void BulkWriteOp::finishExecutingWriteWithoutShardKeyWithId() {
             WriteOp& writeOp = _writeOps[write->writeOpRef.first];
             if (targeterHasStaleShardResponse()) {
                 if (writeOp.getWriteState() != WriteOpState_Ready) {
-                    writeOp.resetWriteToReady();
+                    writeOp.resetWriteToReady(_opCtx);
                 }
             } else if (writeOp.getWriteState() != WriteOpState_Error) {
                 auto nVal = response.getNModified() + response.getNDeleted();
@@ -1879,7 +1885,7 @@ void BulkWriteOp::finishExecutingWriteWithoutShardKeyWithId() {
                     ? boost::optional<const BulkWriteReplyItem&>(replyItem.value())
                     : boost::optional<const BulkWriteReplyItem&>(boost::none);
                 writeOp.noteWriteWithoutShardKeyWithIdResponse(
-                    *write, nVal, targetedWriteBatch->getNumOps(), repl);
+                    _opCtx, *write, nVal, targetedWriteBatch->getNumOps(), repl);
             }
         }
         _deferredResponses = boost::none;

@@ -53,7 +53,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <deque>
 #include <exception>
 #include <functional>
 #include <istream>
@@ -73,7 +72,6 @@
 #include <boost/move/utility_core.hpp>
 #include <boost/optional/optional.hpp>
 
-#include "mongo/base/data_range.h"
 #include "mongo/base/error_codes.h"
 #include "mongo/base/status.h"
 #include "mongo/bson/util/builder.h"
@@ -103,7 +101,6 @@
 #define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kDefault
 
 namespace mongo {
-
 namespace {
 
 void checkNoExternalSortOnMongos(const SortOptions& opts) {
@@ -133,8 +130,6 @@ EncryptionHooks* getEncryptionHooksIfEnabled() {
 }
 
 constexpr std::size_t kSortedFileBufferSize = 64 * 1024;
-
-}  // namespace
 
 namespace sorter {
 
@@ -1402,10 +1397,8 @@ private:
     Data _lastMedian;     // Median of a batch. Reset when _medianCount >= _opts.limit.
     size_t _medianCount;  // Number of docs better or equal to _lastMedian kept so far.
 };
-
 }  // namespace sorter
 
-namespace {
 SharedBufferFragmentBuilder makeMemPool() {
     return SharedBufferFragmentBuilder(
         gOperationMemoryPoolBlockInitialSizeKB.loadRelaxed() * static_cast<size_t>(1024),

@@ -185,13 +185,12 @@ public:
     }
 
     std::unique_ptr<Pipeline, PipelineDeleter> preparePipelineForExecution(
-        const boost::intrusive_ptr<ExpressionContext>& expCtx,
         const AggregateCommandRequest& aggRequest,
         Pipeline* pipeline,
+        const boost::intrusive_ptr<ExpressionContext>& expCtx,
         boost::optional<BSONObj> shardCursorsSortSpec = boost::none,
         ShardTargetingPolicy shardTargetingPolicy = ShardTargetingPolicy::kAllowed,
-        boost::optional<BSONObj> readConcern = boost::none,
-        bool shouldUseDefaultCollectionCollator = false) final {
+        boost::optional<BSONObj> readConcern = boost::none) final {
         return preparePipelineForExecution(pipeline, shardTargetingPolicy, std::move(readConcern));
     }
 
@@ -212,7 +211,7 @@ public:
     boost::optional<Document> lookupSingleDocument(
         const boost::intrusive_ptr<ExpressionContext>& expCtx,
         const NamespaceString& nss,
-        boost::optional<UUID> collectionUUID,
+        UUID collectionUUID,
         const Document& documentKey,
         boost::optional<BSONObj> readConcern) override {
         DBDirectClient client(expCtx->getOperationContext());
@@ -261,15 +260,6 @@ repl::MutableOplogEntry makeOplog(const NamespaceString& nss,
     oplogEntry.set_id(Value(_id->toBSON()));
 
     return oplogEntry;
-}
-
-repl::MutableOplogEntry makePrePostImageOplog(const NamespaceString& nss,
-                                              const Timestamp& timestamp,
-                                              const UUID& uuid,
-                                              const ShardId& shardId,
-                                              const ReshardingDonorOplogId& _id,
-                                              const BSONObj& prePostImage) {
-    return makeOplog(nss, timestamp, uuid, shardId, repl::OpTypeEnum::kNoop, prePostImage, {}, _id);
 }
 
 repl::DurableOplogEntry makeApplyOpsOplog(std::vector<BSONObj> operations,
