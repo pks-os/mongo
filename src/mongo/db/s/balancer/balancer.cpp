@@ -335,6 +335,10 @@ uint64_t getMaxChunkSizeBytes(OperationContext* opCtx, const CollectionType& col
     return coll.getMaxChunkSizeBytes().value_or(balancerConfig->getMaxChunkSizeBytes());
 }
 
+int64_t getMaxChunkSizeMB(OperationContext* opCtx, const CollectionType& coll) {
+    return getMaxChunkSizeBytes(opCtx, coll) / (1024 * 1024);
+}
+
 // Returns a boolean flag indicating whether secondary throttling is enabled and the write concern
 // to apply for migrations
 std::tuple<bool, WriteConcernOptions> getSecondaryThrottleAndWriteConcern(
@@ -1064,8 +1068,6 @@ void Balancer::_mainThread() {
         _beginRound(opCtx.get());
 
         try {
-            shardingContext->shardRegistry()->reload(opCtx.get());
-
             uassert(13258, "oids broken after resetting!", _checkOIDs(opCtx.get()));
 
             Status refreshStatus = balancerConfig->refreshAndCheck(opCtx.get());

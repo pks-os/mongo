@@ -38,14 +38,14 @@
 #include "mongo/bson/bsonelement.h"
 #include "mongo/bson/bsonobj.h"
 #include "mongo/util/shared_buffer.h"
-#include "mongo/util/tracking_allocator.h"
-#include "mongo/util/tracking_context.h"
+#include "mongo/util/tracking/allocator.h"
+#include "mongo/util/tracking/context.h"
 
 namespace mongo::timeseries::bucket_catalog {
 
 struct BucketMetadata {
 public:
-    BucketMetadata(TrackingContext&,
+    BucketMetadata(tracking::Context&,
                    BSONElement elem,
                    boost::optional<StringData> trueMetaFieldName);
 
@@ -67,7 +67,7 @@ public:
 
 private:
     // Empty if metadata field isn't present, owns a copy otherwise.
-    allocator_aware::SharedBuffer<TrackingAllocator<void>> _metadata;
+    allocator_aware::SharedBuffer<tracking::Allocator<void>> _metadata;
 
     // Only the value of '_metadataElement' is used for hashing and comparison.
     BSONElement _metadataElement;

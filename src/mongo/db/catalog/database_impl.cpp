@@ -122,7 +122,7 @@ MONGO_FAIL_POINT_DEFINE(overrideRecordIdsReplicatedDefault);
 MONGO_FAIL_POINT_DEFINE(hangAndFailAfterCreateCollectionReservesOpTime);
 MONGO_FAIL_POINT_DEFINE(openCreateCollectionWindowFp);
 
-#ifdef _WIN32
+
 Status validateDBNameForWindows(StringData dbname) {
     const std::vector<std::string> windowsReservedNames = {
         "con",  "prn",  "aux",  "nul",  "com1", "com2", "com3", "com4", "com5", "com6", "com7",
@@ -137,7 +137,6 @@ Status validateDBNameForWindows(StringData dbname) {
                       str::stream() << "db name \"" << dbname << "\" is a reserved name");
     return Status::OK();
 }
-#endif
 
 void assertNoMovePrimaryInProgress(OperationContext* opCtx, NamespaceString const& nss) {
     const auto scopedDss =
@@ -354,7 +353,7 @@ Status DatabaseImpl::dropView(OperationContext* opCtx, NamespaceString viewName)
         NamespaceString(_viewsName), MODE_X));
 
     Status status = CollectionCatalog::get(opCtx)->dropView(opCtx, viewName);
-    Top::get(opCtx->getServiceContext()).collectionDropped(viewName);
+    Top::getDecoration(opCtx).collectionDropped(viewName);
     return status;
 }
 
@@ -419,7 +418,7 @@ Status DatabaseImpl::dropCollectionEvenIfSystem(OperationContext* opCtx,
     audit::logDropCollection(opCtx->getClient(), nss);
 
     auto serviceContext = opCtx->getServiceContext();
-    Top::get(serviceContext).collectionDropped(nss);
+    Top::getDecoration(opCtx).collectionDropped(nss);
 
     // Drop unreplicated collections immediately.
     // If 'dropOpTime' is provided, we should proceed to rename the collection.
@@ -529,7 +528,7 @@ Status DatabaseImpl::renameCollection(OperationContext* opCtx,
           "fromName"_attr = fromNss,
           "toName"_attr = toNss);
 
-    Top::get(opCtx->getServiceContext()).collectionDropped(fromNss);
+    Top::getDecoration(opCtx).collectionDropped(fromNss);
 
     // Set the namespace of 'collToRename' from within the CollectionCatalog. This is necessary
     // because the CollectionCatalog manages the necessary isolation for this Collection until the

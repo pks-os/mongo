@@ -42,8 +42,6 @@ using mongo::Interval;
 using stats::CEHistogram;
 using stats::ScalarHistogram;
 using stats::TypeCounts;
-using TypeProbability = std::pair<sbe::value::TypeTags, size_t>;
-using TypeCombination = std::vector<TypeProbability>;
 
 auto NumberInt64 = sbe::value::TypeTags::NumberInt64;
 auto StringSmall = sbe::value::TypeTags::StringSmall;
@@ -693,7 +691,8 @@ TEST(HistogramPredicateEstimationTest, IntHistogramIntervalEstimation) {
     }
 
     {  //  {a: {$gte: 20, $lte: 25}}, bucket interpolation.
-        Interval interval(BSON("" << 20 << "" << 25), true /*startIncluded*/, true /*endIncluded*/);
+        Interval interval(BSON("" << 20 << "" << 25), true /*startIncluded*/, true
+                          /*endIncluded*/);
         auto estimatedCard = estimateCardinalityRange(*ceHist,
                                                       true /*lowInclusive*/,
                                                       NumberInt64,
@@ -709,7 +708,8 @@ TEST(HistogramPredicateEstimationTest, IntHistogramIntervalEstimation) {
     }
 
     {  // {a: {$gte: 30, $lte: 40}}
-        Interval interval(BSON("" << 30 << "" << 40), true /*startIncluded*/, true /*endIncluded*/);
+        Interval interval(BSON("" << 30 << "" << 40), true /*startIncluded*/, true
+                          /*endIncluded*/);
         ASSERT_EQ(3.0,
                   HistogramEstimator::estimateCardinality(
                       *ceHist, intCnt, interval, true /*includeScalar*/)
@@ -824,7 +824,7 @@ TEST(HistogramPredicateEstimationTest, StrHistogramIntervalEstimation) {
                                                       valHigh,
                                                       true /*includeScalar*/)
                                  .card;
-        ASSERT_CE_APPROX_EQUAL(6.244, estimatedCard, 0.001);
+        ASSERT_APPROX_EQUAL(6.244, estimatedCard, 0.001);
         ASSERT_EQ(CardinalityEstimate(CardinalityType(estimatedCard), EstimationSource::Code),
                   estimateIntervalCardinality(*ceHist, interval));
     }
@@ -935,7 +935,7 @@ TEST(HistogramPredicateEstimationTest, IntStrHistogramIntervalEstimation) {
                                                       valHigh,
                                                       true /* includeScalar */)
                                  .card;
-        ASSERT_CE_APPROX_EQUAL(13.3, estimatedCard, 0.1);  // Actual: 0.
+        ASSERT_APPROX_EQUAL(13.3, estimatedCard, 0.1);  // Actual: 0.
         ASSERT_EQ(CardinalityEstimate(CardinalityType(estimatedCard), EstimationSource::Code),
                   estimateIntervalCardinality(*ceHist, interval));
     }
@@ -999,7 +999,7 @@ TEST(HistogramPredicateEstimationTest, IntArrayOnlyIntervalEstimate) {
                                                       valHigh,
                                                       false /*includeScalar*/)
                                  .card;
-        ASSERT_CE_APPROX_EQUAL(27.0, estimatedCard, 0.1);  // actual 21.
+        ASSERT_APPROX_EQUAL(27.0, estimatedCard, 0.1);  // actual 21.
         ASSERT_EQ(CardinalityEstimate(CardinalityType(estimatedCard), EstimationSource::Code),
                   estimateIntervalCardinality(*ceHist, interval, false /*includeScalar*/));
     }

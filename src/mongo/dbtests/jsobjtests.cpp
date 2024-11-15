@@ -97,6 +97,8 @@ enum FieldCompareResult {
     RIGHT_SUBFIELD = 2
 };
 
+}  // namespace
+
 typedef std::map<std::string, BSONElement> BSONMap;
 BSONMap bson2map(const BSONObj& obj) {
     BSONMap m;
@@ -190,9 +192,9 @@ FieldCompareResult compareDottedFieldNames(const std::string& l,
     MONGO_verify(0);
     return SAME;  // will never get here
 }
-}  // namespace
 
 namespace JsobjTests {
+
 class BufBuilderBasic {
 public:
     void run() {
@@ -1917,7 +1919,7 @@ public:
         BSONObj obj = BSON("a" << 1 << "a" << 2 << "a" << 3);
 
         int count = 0;
-        BSONForEach(e, obj) {
+        for (auto&& e : obj) {
             ASSERT_EQUALS(e.fieldName(), std::string("a"));
             count += e.Int();
         }

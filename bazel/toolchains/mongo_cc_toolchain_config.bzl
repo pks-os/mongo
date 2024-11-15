@@ -687,23 +687,26 @@ def _impl(ctx):
         ],
     )
 
-    # Warn about global functions being defined without a definition, which
-    # usually indicates an unintentionally extern helper. Note that clang's
-    # `-Wmissing-declarations` is a very different warning.
-    if ctx.attr.compiler == "clang":
-        missing_proto_flag = [flag_group(flags = ["-Wmissing-prototypes"])]
-    elif ctx.attr.compiler == "gcc":
-        missing_proto_flag = [flag_group(flags = ["-Wmissing-declarations"])]
-    else:
-        missing_proto_flag = []
-
-    missing_prototypes_feature = feature(
-        name = "missing_prototypes_warning",
-        enabled = True,
+    # -Wno-invalid-offsetof is only valid for C++ but not for C
+    no_invalid_offsetof_warning_feature = feature(
+        name = "no_invalid_offsetof_warning",
+        enabled = False,
         flag_sets = [
             flag_set(
                 actions = all_cpp_compile_actions,
-                flag_groups = missing_proto_flag,
+                flag_groups = [flag_group(flags = ["-Wno-invalid-offsetof"])],
+            ),
+        ],
+    )
+
+    # -Wno-class-memaccess is only valid for C++ but not for C
+    no_class_memaccess_warning_feature = feature(
+        name = "no_class_memaccess_warning",
+        enabled = False,
+        flag_sets = [
+            flag_set(
+                actions = all_cpp_compile_actions,
+                flag_groups = [flag_group(flags = ["-Wno-class-memaccess"])],
             ),
         ],
     )
@@ -746,7 +749,8 @@ def _impl(ctx):
         overloaded_virtual_warning_feature,
         no_overloaded_virtual_warning_feature,
         pessimizing_move_warning_feature,
-        missing_prototypes_feature,
+        no_invalid_offsetof_warning_feature,
+        no_class_memaccess_warning_feature,
     ]
 
     return [

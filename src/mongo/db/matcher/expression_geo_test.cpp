@@ -72,7 +72,6 @@ TEST(ExpressionGeoTest, GeoNear1) {
     ASSERT_EQUALS(gne.getData().maxDistance, 100);
 }
 
-namespace {
 std::unique_ptr<GeoMatchExpression> makeGeoMatchExpression(const BSONObj& locQuery) {
     std::unique_ptr<GeoExpression> gq(new GeoExpression);
     ASSERT_OK(gq->parseFrom(locQuery));
@@ -97,7 +96,6 @@ void assertGeoNearParseReturnsError(const BSONObj& locQuery) {
     std::unique_ptr<GeoNearExpression> nq(new GeoNearExpression);
     ASSERT_EQUALS(ErrorCodes::BadValue, nq->parseFrom(locQuery));
 }
-}  // namespace
 
 /**
  * A bunch of cases in which a geo expression is equivalent() to both itself or to another
@@ -158,6 +156,39 @@ TEST(ExpressionGeoTest, GeoNearEquivalent) {
         std::unique_ptr<GeoNearMatchExpression> gne1(makeGeoNearMatchExpression(query1)),
             gne2(makeGeoNearMatchExpression(query2));
         ASSERT(gne1->equivalent(gne2.get()));
+    }
+}
+
+TEST(ExpressionGeoTest, SerializeGeoNearUnchanged) {
+    {
+        BSONObj query = fromjson("{$geoNear: [0, 0, 100]}");
+        std::unique_ptr<GeoNearMatchExpression> gne(makeGeoNearMatchExpression(query));
+        ASSERT_BSONOBJ_EQ_AUTO(  // NOLINT
+            R"({"$geoNear":[0, 0, 100]})",
+            gne->getSerializedRightHandSide());
+    }
+    {
+        BSONObj query = fromjson("{$geoNear: [0, 10], $maxDistance: 80 }");
+        std::unique_ptr<GeoNearMatchExpression> gne(makeGeoNearMatchExpression(query));
+        ASSERT_BSONOBJ_EQ_AUTO(  // NOLINT
+            R"({"$geoNear": [0,10],"$maxDistance": 80})",
+            gne->getSerializedRightHandSide());
+    }
+    {
+        BSONObj query = fromjson("{$geoNear: {x: 5, y: 10}}");
+        std::unique_ptr<GeoNearMatchExpression> gne(makeGeoNearMatchExpression(query));
+        ASSERT_BSONOBJ_EQ_AUTO(  // NOLINT
+            R"({"$geoNear": {x: 5, y: 10}})",
+            gne->getSerializedRightHandSide());
+    }
+    {
+        // Although this is very misleading, this is a legal way to query near the point [5,10]
+        // since we allow any field names when representing a point as an embedded document.
+        BSONObj query = fromjson("{$geoNear: {$geometry: 5, $minDistance: 10}}");
+        std::unique_ptr<GeoNearMatchExpression> gne(makeGeoNearMatchExpression(query));
+        ASSERT_BSONOBJ_EQ_AUTO(  // NOLINT
+            R"({"$geoNear": {$geometry: 5, $minDistance: 10}})",
+            gne->getSerializedRightHandSide());
     }
 }
 
@@ -279,6 +310,13 @@ TEST(ExpressionGeoTest, SerializeGeoExpressions) {
         std::unique_ptr<GeoNearMatchExpression> gne(makeGeoNearMatchExpression(query));
         ASSERT_BSONOBJ_EQ_AUTO(  // NOLINT
             R"({"$geoNear":"?array<?number>","$maxDistance":"?number"})",
+            gne->getSerializedRightHandSide(opts));
+    }
+    {
+        BSONObj query = fromjson("{$geoNear: {x: 5, y: 10}}");
+        std::unique_ptr<GeoNearMatchExpression> gne(makeGeoNearMatchExpression(query));
+        ASSERT_BSONOBJ_EQ_AUTO(  // NOLINT
+            R"({"$geoNear":"?array<?number>"})",
             gne->getSerializedRightHandSide(opts));
     }
     {
@@ -412,7 +450,6 @@ TEST(ExpressionGeoTest, SerializeWithCRSIFSpecifiedWithChangedOptions) {
         serialized);
 }
 
-namespace {
 template <typename CreateFn>
 void assertRepresentativeShapeIsStable(BSONObj inputExpr,
                                        BSONObj expectedRepresentativeExpr,
@@ -441,7 +478,6 @@ void assertRepresentativeGeoNearShapeIsStable(BSONObj inputExpr,
             return makeGeoNearMatchExpression(input);
         });
 }
-}  // namespace
 
 TEST(ExpressionGeoTest, RoundTripSerializeGeoExpressions) {
     assertRepresentativeGeoShapeIsStable(fromjson("{$within: {$box: [{x: 4, y: 4}, [6, 6]]}}"),
@@ -609,6 +645,12 @@ TEST(ExpressionGeoTest, RoundTripSerializeGeoExpressions) {
                     }
                 }
             })"));
+
+    assertRepresentativeGeoNearShapeIsStable(fromjson("{$near: {x: 100, y: 0.1}}"),
+                                             fromjson("{$near: [1,1]}"));
+
+    assertRepresentativeGeoNearShapeIsStable(
+        fromjson("{$near: {$maxDistance: 100, $geometry: 0.1}}"), fromjson("{$near: [1,1]}"));
 }
 
 }  // namespace mongo

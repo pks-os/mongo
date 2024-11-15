@@ -2390,13 +2390,11 @@ void HandleRequest::completeOperation(DbResponse& response) {
         executionContext.slowMsOverride,
         executionContext.forceLog);
 
-    Top::get(opCtx->getServiceContext())
-        .incrementGlobalLatencyStats(
-            opCtx,
-            durationCount<Microseconds>(currentOp.elapsedTimeExcludingPauses()),
-            durationCount<Microseconds>(
-                duration_cast<Microseconds>(currentOp.debug().workingTimeMillis)),
-            currentOp.getReadWriteType());
+    ServiceLatencyTracker::getDecoration(opCtx->getService())
+        .increment(opCtx,
+                   currentOp.elapsedTimeExcludingPauses(),
+                   currentOp.debug().workingTimeMillis,
+                   currentOp.getReadWriteType());
 
     if (shouldProfile) {
         // Performance profiling is on
@@ -2426,6 +2424,8 @@ void HandleRequest::completeOperation(DbResponse& response) {
     }
 }
 
+}  // namespace
+
 void logHandleRequestFailure(const Status& status) {
     LOGV2_INFO(4879802, "Failed to handle request", "error"_attr = redact(status));
 }
@@ -2446,8 +2446,6 @@ void onHandleRequestException(const HandleRequest::ExecutionContext& context,
 
     logHandleRequestFailure(status);
 }
-
-}  // namespace
 
 Future<DbResponse> ServiceEntryPointShardRole::handleRequest(OperationContext* opCtx,
                                                              const Message& m) noexcept try {

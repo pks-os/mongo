@@ -46,7 +46,6 @@
 
 namespace queryTester {
 
-namespace {
 struct TestSpec {
     TestSpec(std::filesystem::path path,
              size_t low = 0,
@@ -130,7 +129,9 @@ int runTestProgram(const std::vector<TestSpec> testsToRun,
     // Track collections loaded in the previous test file.
     auto prevFileCollections = std::set<std::string>{};
     // TODO(SERVER-96984): Robustify
-    auto failedTests = std::vector<std::filesystem::path>{};
+    auto failedTestFiles = std::vector<std::filesystem::path>{};
+    auto failedQueryCount = size_t{0};
+    auto totalTestsRun = size_t{0};
     for (auto [testPath, startRange, endRange] : testsToRun) {
         auto currFile = queryTester::QueryFile(testPath, {startRange, endRange});
         currFile.readInEntireFile(mode);
@@ -139,8 +140,10 @@ int runTestProgram(const std::vector<TestSpec> testsToRun,
             continue;
         }
         currFile.runTestFile(conn.get(), mode);
+        totalTestsRun += currFile.getTestsRun();
         if (!currFile.writeAndValidate(mode, outOpt)) {
-            failedTests.push_back(testPath);
+            failedQueryCount += currFile.getFailedQueryCount();
+            failedTestFiles.push_back(testPath);
         }
 
         // Update prevFileCollections with the collections in the current file.
@@ -153,17 +156,14 @@ int runTestProgram(const std::vector<TestSpec> testsToRun,
         conn->shutdown();
     }
 
-    if (failedTests.size() == 0) {
+    if (failedTestFiles.empty()) {
         std::cout << "All tests passed!\n";
         return 0;
     } else {
-        for (const auto& failedTestName : failedTests) {
-            std::cout << failedTestName << " failed!\n";
-        }
+        fileHelpers::printFailureSummary(failedTestFiles, failedQueryCount, totalTestsRun);
         return 1;
     }
 }
-}  // namespace
 }  // namespace queryTester
 
 namespace {
@@ -174,6 +174,7 @@ void assertNextArgExists(const std::vector<std::string>& args,
         queryTester::exitWithError(1, std::string{"Expected more arguments after "} + argName);
     }
 }
+}  // namespace
 
 void printHelpString() {
     std::map<std::string, std::string> helpMap = {
@@ -217,7 +218,6 @@ void printHelpString() {
         std::cout << key << ": " << val << std::endl;
     }
 }
-}  // namespace
 
 int main(const int argc, const char** const argv) {
     auto parsedArgs = std::vector<std::string>(argv, argv + argc);

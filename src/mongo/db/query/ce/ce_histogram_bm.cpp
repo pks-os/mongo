@@ -34,13 +34,8 @@
 #define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kDefault
 
 namespace mongo::ce {
-namespace {
 
 enum DataType { kInt, kStringSmall, kString, kDouble };
-
-using mongo::stats::TypeCounts;
-using TypeProbability = std::pair<sbe::value::TypeTags, size_t>;
-using TypeCombination = std::vector<TypeProbability>;
 
 struct HistogramEstimationBenchmarkConfiguration {
     int numberOfBuckets;
@@ -316,5 +311,4 @@ BENCHMARK(BM_RunHistogramEstimations)
             /*dataType*/ kString,
             /*queryType*/ kRange});
 
-}  // namespace
 }  // namespace mongo::ce

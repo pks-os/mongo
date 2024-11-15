@@ -283,7 +283,7 @@ boost::optional<std::pair<BSONObj, BSONObj>> processTimeseriesMeasurements(
     const boost::optional<TimeseriesOptions>& options = boost::none,
     const boost::optional<const StringDataComparator*>& comparator = boost::none,
     const boost::optional<Date_t> currentMinTime = boost::none) {
-    TrackingContext trackingContext;
+    tracking::Context trackingContext;
     bucket_catalog::MinMax minmax{trackingContext};
     bool computeMinmax = options && comparator;
 
@@ -763,7 +763,7 @@ BSONObj makeTimeseriesInsertCompressedBucketDocument(
     std::shared_ptr<bucket_catalog::WriteBatch> batch,
     const BSONObj& metadata,
     const std::vector<
-        std::pair<StringData, BSONColumnBuilder<TrackingAllocator<void>>::BinaryDiff>>&
+        std::pair<StringData, BSONColumnBuilder<tracking::Allocator<void>>::BinaryDiff>>&
         intermediates) {
     BSONObjBuilder insertBuilder;
     insertBuilder.append(kBucketIdFieldName, batch->bucketId.oid);
@@ -853,7 +853,7 @@ void assertTimeseriesBucketsCollection(const Collection* bucketsColl) {
 }
 
 BSONObj makeBSONColumnDocDiff(
-    const BSONColumnBuilder<TrackingAllocator<void>>::BinaryDiff& binaryDiff) {
+    const BSONColumnBuilder<tracking::Allocator<void>>::BinaryDiff& binaryDiff) {
     return BSON(
         "o" << binaryDiff.offset() << "d"
             << BSONBinData(binaryDiff.data(), binaryDiff.size(), BinDataType::BinDataGeneral));
@@ -910,7 +910,7 @@ BSONObj makeBucketDocument(const std::vector<BSONObj>& measurements,
                            const UUID& collectionUUID,
                            const TimeseriesOptions& options,
                            const StringDataComparator* comparator) {
-    TrackingContext trackingContext;
+    tracking::Context trackingContext;
     auto res = uassertStatusOK(bucket_catalog::internal::extractBucketingParameters(
         trackingContext, collectionUUID, comparator, options, measurements[0]));
     auto time = res.second;
@@ -933,7 +933,6 @@ BSONObj makeBucketDocument(const std::vector<BSONObj>& measurements,
     return bucketDoc.uncompressedBucket;
 }
 
-namespace {
 std::variant<write_ops::UpdateCommandRequest, write_ops::DeleteCommandRequest> makeModificationOp(
     const OID& bucketId,
     const CollectionPtr& coll,
@@ -979,7 +978,6 @@ std::variant<write_ops::UpdateCommandRequest, write_ops::DeleteCommandRequest> m
     write_ops::UpdateCommandRequest op(coll->ns(), {updateEntry});
     return op;
 }
-}  // namespace
 
 write_ops::UpdateOpEntry makeTimeseriesTransformationOpEntry(
     OperationContext* opCtx,
@@ -1204,7 +1202,6 @@ void makeWriteRequest(OperationContext* opCtx,
     }
 }
 
-namespace {
 TimeseriesBatches insertIntoBucketCatalogForUpdate(
     OperationContext* opCtx,
     bucket_catalog::BucketCatalog& bucketCatalog,
@@ -1232,7 +1229,6 @@ TimeseriesBatches insertIntoBucketCatalogForUpdate(
 
     return batches;
 }
-}  // namespace
 
 void performAtomicWrites(
     OperationContext* opCtx,
@@ -1308,7 +1304,6 @@ void performAtomicWrites(
     lastOpFixer.finishedOpSuccessfully();
 }
 
-namespace {
 void commitTimeseriesBucketsAtomically(
     OperationContext* opCtx,
     bucket_catalog::BucketCatalog& sideBucketCatalog,
@@ -1382,7 +1377,6 @@ void commitTimeseriesBucketsAtomically(
 
     batchGuard.dismiss();
 }
-}  // namespace
 
 void performAtomicWritesForDelete(OperationContext* opCtx,
                                   const CollectionPtr& coll,

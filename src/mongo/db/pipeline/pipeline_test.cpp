@@ -136,7 +136,6 @@ void assertStageAtPos(const Pipeline::SourceContainer& stages, int pos) {
 namespace Optimizations {
 namespace Local {
 
-namespace {
 BSONObj pipelineFromJsonArray(const std::string& jsonArray) {
     return fromjson("{pipeline: " + jsonArray + "}");
 }
@@ -156,7 +155,8 @@ class StubExplainInterface : public StubMongoProcessInterface {
     }
     std::unique_ptr<Pipeline, PipelineDeleter> attachCursorSourceToPipelineForLocalRead(
         Pipeline* ownedPipeline,
-        boost::optional<const AggregateCommandRequest&> aggRequest) override {
+        boost::optional<const AggregateCommandRequest&> aggRequest,
+        bool shouldUseCollectionDefaultCollator) override {
         std::unique_ptr<Pipeline, PipelineDeleter> pipeline(
             ownedPipeline, PipelineDeleter(ownedPipeline->getContext()->getOperationContext()));
         return pipeline;
@@ -227,7 +227,6 @@ void assertPipelineOptimizesAndSerializesTo(const std::string& inputPipeJson,
                                             const std::string& outputPipeJson) {
     assertPipelineOptimizesAndSerializesTo(inputPipeJson, outputPipeJson, outputPipeJson);
 }
-}  // namespace
 
 TEST(PipelineOptimizationTest, MoveSkipBeforeProject) {
     assertPipelineOptimizesAndSerializesTo("[{$project: {a : 1}}, {$skip : 5}]",
@@ -4330,7 +4329,6 @@ TEST(PipelineOptimizationTest, UnionWithViewsSampleUseCase) {
         "]");
 }
 
-namespace {
 std::unique_ptr<Pipeline, PipelineDeleter> getOptimizedPipeline(const BSONObj inputBson) {
     QueryTestServiceContext testServiceContext;
     auto opCtx = testServiceContext.makeOperationContext();
@@ -4374,7 +4372,6 @@ void assertTwoPipelinesOptimizeAndMergeTo(const std::string& inputPipe1,
             .verbosity = boost::make_optional(ExplainOptions::Verbosity::kQueryPlanner)})),
         Value(outputBson["pipeline"]));
 }
-}  // namespace
 
 TEST(PipelineOptimizationTest, MergeUnwindPipelineWithSortLimitPipelineDoesNotSwapIfNoPreserve) {
     std::string inputPipe1 =
