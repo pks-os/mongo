@@ -265,9 +265,6 @@ void DBClientCursor::dataReceived(const Message& reply, bool& retry, string& hos
 /** If true, safe to call next().  Requests more from server if necessary. */
 bool DBClientCursor::more() {
     tassert(9279711, "Cursor is not initialized", _isInitialized);
-    if (!_putBack.empty())
-        return true;
-
     if (_batch.pos < _batch.objs.size())
         return true;
 
@@ -280,12 +277,6 @@ bool DBClientCursor::more() {
 
 BSONObj DBClientCursor::next() {
     tassert(9279712, "Cursor is not initialized", _isInitialized);
-    if (!_putBack.empty()) {
-        BSONObj ret = _putBack.top();
-        _putBack.pop();
-        return ret;
-    }
-
     uassert(
         13422, "DBClientCursor next() called but more() is false", _batch.pos < _batch.objs.size());
 
@@ -304,7 +295,7 @@ BSONObj DBClientCursor::nextSafe() {
     return o;
 }
 
-void DBClientCursor::peek(vector<BSONObj>& v, int atMost) {
+void DBClientCursor::peek(std::vector<BSONObj>& v, int atMost) const {
     tassert(9279713, "Cursor is not initialized", _isInitialized);
     auto end = atMost >= static_cast<int>(_batch.objs.size() - _batch.pos)
         ? _batch.objs.end()
@@ -312,32 +303,27 @@ void DBClientCursor::peek(vector<BSONObj>& v, int atMost) {
     v.insert(v.end(), _batch.objs.begin() + _batch.pos, end);
 }
 
-BSONObj DBClientCursor::peekFirst() {
-    vector<BSONObj> v;
-    peek(v, 1);
-
-    if (v.size() > 0)
-        return v[0];
-    else
-        return BSONObj();
+BSONObj DBClientCursor::peekFirst() const {
+    if (_batch.pos < _batch.objs.size()) {
+        return _batch.objs[_batch.pos];
+    }
+    return BSONObj();
 }
 
-bool DBClientCursor::peekError(BSONObj* error) {
+bool DBClientCursor::peekError(BSONObj* error) const {
     tassert(9279714, "Cursor is not initialized", _isInitialized);
     if (!_wasError)
         return false;
 
-    vector<BSONObj> v;
-    peek(v, 1);
+    BSONObj peeked = peekFirst();
 
-    MONGO_verify(v.size() == 1);
     // We check both the legacy error format, and the new error format. hasErrField checks for
     // $err, and getStatusFromCommandResult checks for modern errors of the form '{ok: 0.0, code:
     // <...>, errmsg: ...}'.
-    MONGO_verify(hasErrField(v[0]) || !getStatusFromCommandResult(v[0]).isOK());
+    MONGO_verify(hasErrField(peeked) || !getStatusFromCommandResult(peeked).isOK());
 
     if (error)
-        *error = v[0].getOwned();
+        *error = peeked.getOwned();
     return true;
 }
 
@@ -398,7 +384,10 @@ DBClientCursor::DBClientCursor(DBClientBase* client,
 }
 
 StatusWith<std::unique_ptr<DBClientCursor>> DBClientCursor::fromAggregationRequest(
-    DBClientBase* client, AggregateCommandRequest aggRequest, bool secondaryOk, bool useExhaust) {
+    DBClientBase* client,
+    const AggregateCommandRequest& aggRequest,
+    bool secondaryOk,
+    bool useExhaust) {
     BSONObj ret;
     try {
         if (!client->runCommand(aggRequest.getNamespace().dbName(),
@@ -410,18 +399,24 @@ StatusWith<std::unique_ptr<DBClientCursor>> DBClientCursor::fromAggregationReque
     } catch (...) {
         return exceptionToStatus();
     }
-    long long cursorId = ret["cursor"].Obj()["id"].Long();
-    std::vector<BSONObj> firstBatch;
-    for (BSONElement elem : ret["cursor"].Obj()["firstBatch"].Array()) {
-        firstBatch.emplace_back(elem.Obj().getOwned());
-    }
+
+    const BSONObj cursorObj = ret["cursor"].Obj();
+    const long long cursorId = cursorObj["id"].Long();
+    auto firstBatch = [](auto&& in) {
+        std::vector<BSONObj> objs;
+        objs.reserve(in.size());
+        std::transform(in.begin(), in.end(), std::back_inserter(objs), [](auto&& e) {
+            return e.Obj().getOwned();
+        });
+        return objs;
+    }(cursorObj["firstBatch"].Array());
+
     boost::optional<BSONObj> postBatchResumeToken;
-    if (auto postBatchResumeTokenElem = ret["cursor"].Obj()["postBatchResumeToken"];
-        postBatchResumeTokenElem.type() == BSONType::Object) {
-        postBatchResumeToken = postBatchResumeTokenElem.Obj().getOwned();
-    } else if (ret["cursor"].Obj().hasField("postBatchResumeToken")) {
-        return Status(ErrorCodes::Error(5761702),
-                      "Expected field 'postbatchResumeToken' to be of object type");
+    if (auto elem = cursorObj["postBatchResumeToken"]) {
+        if (elem.type() != BSONType::Object)
+            return Status(ErrorCodes::Error(5761702),
+                          "Expected field 'postBatchResumeToken' to be of object type");
+        postBatchResumeToken = elem.Obj().getOwned();
     }
 
     boost::optional<Timestamp> operationTime = boost::none;
@@ -433,9 +428,9 @@ StatusWith<std::unique_ptr<DBClientCursor>> DBClientCursor::fromAggregationReque
                                              aggRequest.getNamespace(),
                                              cursorId,
                                              useExhaust,
-                                             firstBatch,
+                                             std::move(firstBatch),
                                              operationTime,
-                                             postBatchResumeToken)};
+                                             std::move(postBatchResumeToken))};
 }
 
 DBClientCursor::~DBClientCursor() {

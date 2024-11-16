@@ -43,12 +43,14 @@ namespace mongo {
 TicketHolder::TicketHolder(ServiceContext* serviceContext,
                            int numTickets,
                            bool trackPeakUsed,
-                           ResizePolicy resizePolicy)
+                           ResizePolicy resizePolicy,
+                           int32_t maxQueueDepth)
     : _trackPeakUsed(trackPeakUsed),
       _resizePolicy(resizePolicy),
       _serviceContext(serviceContext),
       _tickets(numTickets),
-      _outof(numTickets) {}
+      _outof(numTickets),
+      _maxQueueDepth(maxQueueDepth) {}
 
 bool TicketHolder::resize(OperationContext* opCtx, int32_t newSize, Date_t deadline) {
     stdx::lock_guard<stdx::mutex> lk(_resizeMutex);
@@ -150,7 +152,8 @@ boost::optional<Ticket> TicketHolder::_waitForTicketUntilMaybeInterruptible(
 
     if (ticket) {
         cancelWait.dismiss();
-        _updateQueueStatsOnTicketAcquisition(admCtx, _normalPriorityQueueStats);
+        _updateQueueStatsOnTicketAcquisition(
+            admCtx, _normalPriorityQueueStats, admCtx->getPriority());
         _updatePeakUsed();
         return ticket;
     } else {
@@ -178,13 +181,22 @@ boost::optional<Ticket> TicketHolder::_performWaitForTicketUntil(OperationContex
     while (true) {
         if (boost::optional<Ticket> maybeTicket = _tryAcquireNormalPriorityTicket(admCtx);
             maybeTicket) {
-            return std::move(*maybeTicket);
+            return maybeTicket;
         }
 
         Date_t deadline = nextDeadline();
-        _waiterCount.fetchAndAdd(1);
-        _tickets.waitUntil(0, deadline);
-        _waiterCount.fetchAndSubtract(1);
+        {
+            const auto previousWaiterCount = _waiterCount.fetchAndAdd(1);
+
+            // Since uassert throws, we use raii to substract the waiter count
+            ON_BLOCK_EXIT([&] { _waiterCount.fetchAndSubtract(1); });
+
+            uassert(ErrorCodes::AdmissionQueueOverflow,
+                    "MongoDB is overloaded and cannot accept new operations. Try again later.",
+                    previousWaiterCount < _maxQueueDepth);
+
+            _tickets.waitUntil(0, deadline);
+        }
 
         if (interruptible) {
             opCtx->checkForInterrupt();
@@ -198,14 +210,15 @@ boost::optional<Ticket> TicketHolder::_performWaitForTicketUntil(OperationContex
 }
 
 boost::optional<Ticket> TicketHolder::tryAcquire(AdmissionContext* admCtx) {
-    if (admCtx->getPriority() == AdmissionContext::Priority::kExempt) {
-        _updateQueueStatsOnTicketAcquisition(admCtx, _exemptQueueStats);
+    const auto currentPriority = admCtx->getPriority();
+    if (currentPriority == AdmissionContext::Priority::kExempt) {
+        _updateQueueStatsOnTicketAcquisition(admCtx, _exemptQueueStats, currentPriority);
         return Ticket{this, admCtx};
     }
 
     auto ticket = _tryAcquireNormalPriorityTicket(admCtx);
     if (ticket) {
-        _updateQueueStatsOnTicketAcquisition(admCtx, _normalPriorityQueueStats);
+        _updateQueueStatsOnTicketAcquisition(admCtx, _normalPriorityQueueStats, currentPriority);
         _updatePeakUsed();
     }
 
@@ -288,10 +301,16 @@ void TicketHolder::_updateQueueStatsOnRelease(TicketHolder::QueueStats& queueSta
 }
 
 void TicketHolder::_updateQueueStatsOnTicketAcquisition(AdmissionContext* admCtx,
-                                                        TicketHolder::QueueStats& queueStats) {
+                                                        TicketHolder::QueueStats& queueStats,
+                                                        AdmissionContext::Priority priority) {
     if (admCtx->getAdmissions() == 0) {
         queueStats.totalNewAdmissions.fetchAndAddRelaxed(1);
     }
+
+    if (priority == AdmissionContext::Priority::kExempt) {
+        admCtx->recordExemptedAdmission();
+    }
+
     admCtx->recordAdmission();
     queueStats.totalStartedProcessing.fetchAndAddRelaxed(1);
 }
@@ -326,5 +345,9 @@ void TicketHolder::setNumFinishedProcessing_forTest(int32_t numFinishedProcessin
 
 void TicketHolder::setPeakUsed_forTest(int32_t used) {
     _peakUsed.store(used);
+}
+
+int32_t TicketHolder::waiting_forTest() const {
+    return _waiterCount.load();
 }
 }  // namespace mongo

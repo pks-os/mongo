@@ -185,7 +185,7 @@ EstimationResult interpolateEstimateInBucket(const ScalarHistogram& h,
 
     // If the value is minimal for its type, and the operation is $lt or $lte return cardinality up
     // to the previous bucket.
-    auto&& [min, inclusive] = stats::getMinMaxBoundForSBEType(tag, true /*isMin*/);
+    auto&& [min, inclusive] = stats::getMinBound(tag);
     if (compareValues(min.getTag(), min.getValue(), tag, val) == 0) {
         return {resultCard, resultNDV};
     }
@@ -485,8 +485,9 @@ CardinalityEstimate estimateIntervalCardinality(const stats::CEHistogram& ceHist
                                                 const mongo::Interval& interval,
                                                 bool includeScalar) {
     if (interval.isFullyOpen()) {
-        return CardinalityEstimate{CardinalityType{ceHist.getSampleSize()},
-                                   EstimationSource::Histogram};
+        return CardinalityEstimate{
+            CardinalityType{static_cast<CardinalityType>(ceHist.getSampleSize())},
+            EstimationSource::Histogram};
     }
 
     bool startInclusive = interval.startInclusive;

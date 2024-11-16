@@ -41,7 +41,8 @@
 namespace mongo {
 namespace {
 
-using DocumentSourceScoreFusionTest = AggregationContextFixture;
+class DocumentSourceScoreFusionTest : service_context_test::WithSetupTransportLayer,
+                                      public AggregationContextFixture {};
 
 // TODO SERVER-94022: Adapt all the tests that "ASSERT_DOES_NOT_THROW" to confirm that the desugared
 // pipeline returns the correct list of stages when the $rankFusion implementation is complete.
@@ -55,6 +56,16 @@ TEST_F(DocumentSourceScoreFusionTest, ErrorsIfNoInputsField) {
     ASSERT_THROWS_CODE(DocumentSourceScoreFusion::createFromBson(spec.firstElement(), getExpCtx()),
                        AssertionException,
                        ErrorCodes::IDLFailedToParse);
+}
+
+TEST_F(DocumentSourceScoreFusionTest, ErrorsIfNoNestedObject) {
+    auto spec = fromjson(R"({
+        $rankFusion: 'not_an_object'
+    })");
+
+    ASSERT_THROWS_CODE(DocumentSourceScoreFusion::createFromBson(spec.firstElement(), getExpCtx()),
+                       AssertionException,
+                       ErrorCodes::FailedToParse);
 }
 
 TEST_F(DocumentSourceScoreFusionTest, ErrorsIfUnknownField) {

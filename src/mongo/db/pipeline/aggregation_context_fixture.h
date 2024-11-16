@@ -62,7 +62,7 @@ public:
         : AggregationContextFixture(NamespaceString::createNamespaceString_forTest(
               boost::none, "unittests", "pipeline_test")) {}
 
-    AggregationContextFixture(NamespaceString nss) {
+    explicit AggregationContextFixture(NamespaceString nss) {
         _opCtx = makeOperationContext();
         _expCtx = make_intrusive<ExpressionContextForTest>(_opCtx.get(), nss);
         _expCtx->setTempDir(_tempDir.path());
@@ -245,9 +245,8 @@ struct DocumentSourceDeleter {
     }
 };
 
-namespace {
 // A utility function to convert pipeline (a vector of BSONObj) to a string. Helpful for debugging.
-std::string to_string(const std::vector<BSONObj>& objs) {
+inline std::string to_string(const std::vector<BSONObj>& objs) {
     std::stringstream sstrm;
     sstrm << "[" << std::endl;
     for (const auto& obj : objs) {
@@ -256,5 +255,4 @@ std::string to_string(const std::vector<BSONObj>& objs) {
     sstrm << "]" << std::endl;
     return sstrm.str();
 }
-}  // namespace
 }  // namespace mongo

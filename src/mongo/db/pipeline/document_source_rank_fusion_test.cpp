@@ -42,7 +42,8 @@ namespace mongo {
 namespace {
 
 // This provides access to getExpCtx(), but we'll use a different name for this test suite.
-using DocumentSourceRankFusionTest = AggregationContextFixture;
+class DocumentSourceRankFusionTest : service_context_test::WithSetupTransportLayer,
+                                     public AggregationContextFixture {};
 
 TEST_F(DocumentSourceRankFusionTest, ErrorsIfNoInputsField) {
     auto spec = fromjson(R"({
@@ -53,6 +54,16 @@ TEST_F(DocumentSourceRankFusionTest, ErrorsIfNoInputsField) {
     ASSERT_THROWS_CODE(DocumentSourceRankFusion::createFromBson(spec.firstElement(), getExpCtx()),
                        AssertionException,
                        ErrorCodes::IDLFailedToParse);
+}
+
+TEST_F(DocumentSourceRankFusionTest, ErrorsIfNoNestedObject) {
+    auto spec = fromjson(R"({
+        $rankFusion: 'not_an_object'
+    })");
+
+    ASSERT_THROWS_CODE(DocumentSourceRankFusion::createFromBson(spec.firstElement(), getExpCtx()),
+                       AssertionException,
+                       ErrorCodes::FailedToParse);
 }
 
 TEST_F(DocumentSourceRankFusionTest, ErrorsIfUnknownField) {
