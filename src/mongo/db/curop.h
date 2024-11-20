@@ -275,6 +275,14 @@ public:
 
     OpDebug() = default;
 
+    /**
+     * Adds information about the current operation to "pAttrs". Since this information will end up
+     * in logs, typically as part of "Slow Query" logging, this method also handles redaction and
+     * removal of sensitive fields from any command BSON.
+     *
+     * The metrics/fields reported here should generally be kept in line with what is reported in
+     * append().
+     */
     void report(OperationContext* opCtx,
                 const SingleThreadedLockStats* lockStats,
                 const ResourceConsumption::OperationMetrics* operationMetrics,
@@ -283,10 +291,14 @@ public:
     void reportStorageStats(logv2::DynamicAttributes* pAttrs) const;
 
     /**
-     * Appends information about the current operation to "builder"
+     * Appends information about the current operation to "builder". This info typically ends up in
+     * the DB's profile collection. It is not ready to be logged as-is; redaction and removal of
+     * sensitive command fields are required first.
      *
-     * @param curop reference to the CurOp that owns this OpDebug
      * @param lockStats lockStats object containing locking information about the operation
+     *
+     * The metrics/fields reported here should generally be kept in line with what is reported in
+     * report().
      */
     void append(OperationContext* opCtx,
                 const SingleThreadedLockStats& lockStats,
@@ -505,6 +517,11 @@ public:
 
     // Stores the duration of execution after removing time spent blocked.
     Milliseconds workingTimeMillis{0};
+
+    // Stores the total time an operation spends with an uncommitted oplog slot held open. Indicator
+    // that an operation is holding back replication by causing oplog holes to remain open for
+    // unusual amounts of time.
+    Microseconds totalOplogSlotDurationMicros{0};
 
     // Stores the amount of the data processed by the throttle cursors in MB/sec.
     boost::optional<float> dataThroughputLastSecond;

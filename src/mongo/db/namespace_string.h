@@ -568,7 +568,7 @@ public:
     bool isConfigTransactionsCollection() const;
 
     /**
-     * Returns whether the specified namespace is <database>.enxcol_.<.+>.(esc|ecc|ecoc).
+     * Returns whether the specified namespace is <database>.enxcol_.<.+>.(esc|ecoc).
      */
     bool isFLE2StateCollection() const;
 
@@ -722,18 +722,6 @@ public:
 
         return StringData{_data.data() + kDataOffset, _data.size() - kDataOffset}.compare(
             StringData{other._data.data() + kDataOffset, other._data.size() - kDataOffset});
-    }
-
-    /**
-     * Checks if a given tenant prefixes or matches the tenantId from this NamespaceString.
-     * TODO SERVER-63517 Since we are removing tenant migration code we might be able to remove this
-     * method from the codebase.
-     */
-    bool isNamespaceForTenant(StringData tenant) const {
-        if (auto tid = tenantId()) {
-            return tid->toString() == tenant;
-        }
-        return db_deprecated().startsWith(tenant + "_");
     }
 
     /**

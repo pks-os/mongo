@@ -52,7 +52,6 @@ constexpr auto dropPendingNSPrefix = "system.drop."_sd;
 
 constexpr auto fle2Prefix = "enxcol_."_sd;
 constexpr auto fle2EscSuffix = ".esc"_sd;
-constexpr auto fle2EccSuffix = ".ecc"_sd;
 constexpr auto fle2EcocSuffix = ".ecoc"_sd;
 constexpr auto fle2EcocCompactSuffix = ".ecoc.compact"_sd;
 
@@ -157,16 +156,12 @@ bool NamespaceString::isLegalClientSystemNS() const {
  * Oplog entries on 'config.shards' should be processed one at a time, otherwise the in-memory state
  * that its kept on the TopologyTimeTicker might be wrong.
  *
- * Serialize updates to 'config.tenantMigrationDonors' to avoid races
- * with creating tenant access blockers on secondaries.
  */
 bool NamespaceString::mustBeAppliedInOwnOplogBatch() const {
     auto ns = this->ns();
     return isSystemDotViews() || isServerConfigurationCollection() || isPrivilegeCollection() ||
         ns == kDonorReshardingOperationsNamespace.ns() ||
-        ns == kForceOplogBatchBoundaryNamespace.ns() ||
-        ns == kTenantMigrationDonorsNamespace.ns() ||
-        ns == kTenantMigrationRecipientsNamespace.ns() || ns == kConfigsvrShardsNamespace.ns();
+        ns == kForceOplogBatchBoundaryNamespace.ns() || ns == kConfigsvrShardsNamespace.ns();
 }
 
 NamespaceString NamespaceString::makeBulkWriteNSS(const boost::optional<TenantId>& tenantId) {
@@ -353,14 +348,13 @@ bool NamespaceString::isConfigTransactionsCollection() const {
 
 bool NamespaceString::isFLE2StateCollection() const {
     return coll().startsWith(fle2Prefix) &&
-        (coll().endsWith(fle2EscSuffix) || coll().endsWith(fle2EccSuffix) ||
-         coll().endsWith(fle2EcocSuffix) || coll().endsWith(fle2EcocCompactSuffix));
+        (coll().endsWith(fle2EscSuffix) || coll().endsWith(fle2EcocSuffix) ||
+         coll().endsWith(fle2EcocCompactSuffix));
 }
 
 bool NamespaceString::isFLE2StateCollection(StringData coll) {
     return coll.startsWith(fle2Prefix) &&
-        (coll.endsWith(fle2EscSuffix) || coll.endsWith(fle2EccSuffix) ||
-         coll.endsWith(fle2EcocSuffix));
+        (coll.endsWith(fle2EscSuffix) || coll.endsWith(fle2EcocSuffix));
 }
 
 bool NamespaceString::isOplogOrChangeCollection() const {

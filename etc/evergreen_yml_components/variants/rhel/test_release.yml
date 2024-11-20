@@ -86,11 +86,11 @@ buildvariants:
 
   - name: enterprise-rhel-8-64-bit
     display_name: "Enterprise RHEL 8"
-    tags: ["forbid_tasks_tagged_with_experimental_experimental"]
+    tags: ["forbid_tasks_tagged_with_experimental"]
     cron: "0 4 * * *" # From the ${project_nightly_cron} parameter.
     run_on:
       - rhel8.8-small
-    expansions: &enterprise-rhel-8-64-bit-expansions
+    expansions:
       additional_package_targets: >-
         archive-mongocryptd
         archive-mongocryptd-debug
@@ -239,7 +239,7 @@ buildvariants:
 
   - name: rhel93
     display_name: RHEL 9.3
-    tags: ["bazel_check", "forbid_tasks_tagged_with_experimental_experimental"]
+    tags: ["bazel_check", "forbid_tasks_tagged_with_experimental"]
     cron: "0 4 * * *" # From the ${project_nightly_cron} parameter.
     run_on:
       - rhel93-large
@@ -289,7 +289,7 @@ buildvariants:
     cron: "0 4 * * *" # From the ${project_nightly_cron} parameter.
     run_on:
       - rhel93-small
-    expansions: &enterprise-rhel-93-64-bit-expansions
+    expansions:
       additional_package_targets: archive-mongocryptd archive-mongocryptd-debug
       push_path: linux
       push_bucket: downloads.10gen.com
