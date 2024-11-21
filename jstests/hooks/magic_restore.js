@@ -3,8 +3,8 @@
  * cursor has already been taken by magic_restore_backup.js.
  */
 
-import {MagicRestoreUtils} from "jstests/libs/backup_utils.js";
 import {DiscoverTopology, Topology} from "jstests/libs/discover_topology.js";
+import {MagicRestoreTest} from "jstests/libs/magic_restore_test.js";
 import {ReplSetTest} from "jstests/libs/replsettest.js";
 
 // Starts up a new node on dbpath where a backup cursor has already been written from sourceConn.
@@ -69,7 +69,7 @@ function performRestore(sourceConn, expectedConfig, nodeType, dbpath, name, opti
                 jsTestLog("Magic Restore: Writing " + currentBatchSize.toString() +
                           " bytes to pipe.");
 
-                MagicRestoreUtils.writeObjsToMagicRestorePipe(
+                MagicRestoreTest.writeObjsToMagicRestorePipe(
                     MongoRunner.dataDir + "/" + name, currentBatch, true /* persistPipe */);
 
                 currentBatch = [];
@@ -87,7 +87,7 @@ function performRestore(sourceConn, expectedConfig, nodeType, dbpath, name, opti
 
         // If non-empty batch remains push it into batches.
         if (currentBatch.length != 0) {
-            MagicRestoreUtils.writeObjsToMagicRestorePipe(
+            MagicRestoreTest.writeObjsToMagicRestorePipe(
                 MongoRunner.dataDir + "/" + name, currentBatch, true /* persistPipe */);
         }
     } else {
@@ -97,10 +97,10 @@ function performRestore(sourceConn, expectedConfig, nodeType, dbpath, name, opti
             "maxCheckpointTs": checkpointTimestamp,
         }];
         jsTestLog("Restore configuration: " + tojson(objs[0]));
-        MagicRestoreUtils.writeObjsToMagicRestorePipe(MongoRunner.dataDir + "/" + name, objs);
+        MagicRestoreTest.writeObjsToMagicRestorePipe(MongoRunner.dataDir + "/" + name, objs);
     }
 
-    MagicRestoreUtils.runMagicRestoreNode(MongoRunner.dataDir + "/" + name, dbpath, options);
+    MagicRestoreTest.runMagicRestoreNode(MongoRunner.dataDir + "/" + name, dbpath, options);
     return consistencyTs;
 }
 
@@ -192,7 +192,12 @@ function dataConsistencyCheck(sourceNode, restoreNode, consistencyTs) {
         let sourceDb = sourceNode.getDB(dbName);
         let restoreDb = restoreNode.getDB(dbName);
 
-        let sourceCollections = sourceDatabases[dbName].sort((a, b) => a.localeCompare(b));
+        // Restore will drop "config.placementHistory", so we should omit that namespace from the
+        // consistency checker.
+        let sourceCollections =
+            sourceDatabases[dbName]
+                .filter(collection => dbName !== "config" || collection !== "placementHistory")
+                .sort((a, b) => a.localeCompare(b));
         let restoreCollections = restoreDatabases[dbName].sort((a, b) => a.localeCompare(b));
 
         let idx = 0;
@@ -210,7 +215,8 @@ function dataConsistencyCheck(sourceNode, restoreNode, consistencyTs) {
             // collection is expected to be different here since shard names and last known ping
             // times will be different from the source node. The preimages and change_collections
             // collections use independent untimestamped truncates to delete old data, and therefore
-            // they be inconsistent between source and destination.
+            // they be inconsistent between source and destination. placementHistory is dropped by
+            // magic restore.
             if (sourceCollName === "system.keys" || sourceCollName === "mongos" ||
                 sourceCollName === "system.preimages" ||
                 sourceCollName === "system.change_collection") {

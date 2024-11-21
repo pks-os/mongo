@@ -4,12 +4,13 @@
  * @tags: [
  *     requires_persistence,
  *     requires_wiredtiger,
- *     featureFlagSecondaryIndexChecksInDbCheck
+ *     featureFlagSecondaryIndexChecksInDbCheck,
+ *     incompatible_with_windows_tls
  * ]
  */
 
-import {_copyFileHelper, MagicRestoreUtils} from "jstests/libs/backup_utils.js";
 import {configureFailPoint} from "jstests/libs/fail_point_util.js";
+import {MagicRestoreTest} from "jstests/libs/magic_restore_test.js";
 import {ReplSetTest} from "jstests/libs/replsettest.js";
 import {
     checkHealthLog,
@@ -18,12 +19,6 @@ import {
     resetAndInsert,
     runDbCheck
 } from "jstests/replsets/libs/dbcheck_utils.js";
-
-// TODO SERVER-86034: Run on Windows machines once named pipe related failures are resolved.
-if (_isWindows()) {
-    jsTestLog("Temporarily skipping test for Windows variants. See SERVER-86034.");
-    quit();
-}
 
 // TODO SERVER-87225: Enable fast count on validate when operations applied during a restore are
 // counted correctly.
@@ -52,16 +47,16 @@ assert.commandWorked(sourceDb.runCommand({
     indexes: [{key: {a: 1}, name: 'a_1'}],
 }));
 assert.eq(sourceColl.find({}).count(), nDocs);
-const skipUnindexingDocumentWhenDeletedPrimary =
-    configureFailPoint(sourceDb, "skipUnindexingDocumentWhenDeleted", {indexName: "a_1"});
+configureFailPoint(sourceDb, "skipUnindexingDocumentWhenDeleted", {indexName: "a_1"});
+
 jsTestLog("Deleting docs");
 assert.commandWorked(sourceColl.deleteMany({}));
 assert.eq(sourceColl.find({}).count(), 0);
 
-const magicRestoreUtils = new MagicRestoreUtils(
-    {backupSource: sourcePrimary, pipeDir: MongoRunner.dataDir, insertHigherTermOplogEntry: true});
+const magicRestoreTest = new MagicRestoreTest(
+    {rst: sourceCluster, pipeDir: MongoRunner.dataDir, insertHigherTermOplogEntry: true});
 
-magicRestoreUtils.takeCheckpointAndOpenBackup();
+magicRestoreTest.takeCheckpointAndOpenBackup();
 
 // Start dbcheck after the backup cursor was opened. The dbcheck oplog entries will be passed to
 // magic restore to perform a PIT restore.
@@ -81,12 +76,12 @@ checkHealthLog(sourcePrimaryHealthLog, logQueries.recordNotFoundQuery, nDocs);
 // Check that there are no other errors/warnings on the primary.
 checkHealthLog(sourcePrimaryHealthLog, logQueries.allErrorsOrWarningsQuery, nDocs);
 
-const checkpointTimestamp = magicRestoreUtils.getCheckpointTimestamp();
-let {lastOplogEntryTs, entriesAfterBackup} = magicRestoreUtils.getEntriesAfterBackup(sourcePrimary);
+const checkpointTimestamp = magicRestoreTest.getCheckpointTimestamp();
+let {lastOplogEntryTs, entriesAfterBackup} = magicRestoreTest.getEntriesAfterBackup(sourcePrimary);
 
-magicRestoreUtils.copyFilesAndCloseBackup();
+magicRestoreTest.copyFilesAndCloseBackup();
 
-let expectedConfig = assert.commandWorked(sourcePrimary.adminCommand({replSetGetConfig: 1})).config;
+let expectedConfig = magicRestoreTest.getExpectedConfig();
 // The new node will be allocated a new port by the test fixture.
 expectedConfig.members[0].host = getHostName() + ":" + (Number(sourcePrimary.port) + 2);
 let restoreConfiguration = {
@@ -96,17 +91,16 @@ let restoreConfiguration = {
     // Restore to the timestamp of the last oplog entry on the source cluster.
     "pointInTimeTimestamp": lastOplogEntryTs
 };
-restoreConfiguration =
-    magicRestoreUtils.appendRestoreToHigherTermThanIfNeeded(restoreConfiguration);
+restoreConfiguration = magicRestoreTest.appendRestoreToHigherTermThanIfNeeded(restoreConfiguration);
 
-magicRestoreUtils.writeObjsAndRunMagicRestore(restoreConfiguration, entriesAfterBackup, {
+magicRestoreTest.writeObjsAndRunMagicRestore(restoreConfiguration, entriesAfterBackup, {
     "replSet": jsTestName(),
     setParameter: {"failpoint.sleepToWaitForHealthLogWrite": "{'mode': 'alwaysOn'}"}
 });
 
 // Start a new replica set fixture on the dbpath.
 const destinationCluster = new ReplSetTest({nodes: 1});
-destinationCluster.startSet({dbpath: magicRestoreUtils.getBackupDbPath(), noCleanData: true});
+destinationCluster.startSet({dbpath: magicRestoreTest.getBackupDbPath(), noCleanData: true});
 
 let destPrimary = destinationCluster.getPrimary();
 const destPrimaryHealthLog = destPrimary.getDB("local").system.healthlog;

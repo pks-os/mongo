@@ -555,10 +555,12 @@ ExitCode _initAndListen(ServiceContext* serviceContext) {
         serviceContext->setPeriodicRunner(std::move(runner));
     }
 
-    // When starting the server with --queryableBackupMode or --recoverFromOplogAsStandalone, we are
-    // in read-only mode and don't allow user-originating operations to perform writes
+    // When starting the server with --queryableBackupMode, --recoverFromOplogAsStandalone or
+    // --magicRestore, we are in read-only mode and don't allow user-originating operations to
+    // perform writes
     if (storageGlobalParams.queryableBackupMode ||
-        repl::ReplSettings::shouldRecoverFromOplogAsStandalone()) {
+        repl::ReplSettings::shouldRecoverFromOplogAsStandalone() ||
+        storageGlobalParams.magicRestore) {
         serviceContext->disallowUserWrites();
     }
 
@@ -876,6 +878,7 @@ ExitCode _initAndListen(ServiceContext* serviceContext) {
                               << "startupRecoveryForRestore at the same time",
                 !repl::startupRecoveryForRestore);
 
+        // This uassert will also cover if we are running magic restore.
         uassert(ErrorCodes::BadValue,
                 str::stream() << "Cannot use queryableBackupMode in a replica set",
                 !replCoord->getSettings().isReplSet());
@@ -1175,16 +1178,6 @@ ExitCode _initAndListen(ServiceContext* serviceContext) {
     if (MONGO_unlikely(shutdownAtStartup.shouldFail())) {
         LOGV2(20556, "Starting clean exit via failpoint");
         exitCleanly(ExitCode::clean);
-    }
-
-    if (storageGlobalParams.magicRestore) {
-        TimeElapsedBuilderScopedTimer scopedTimer(
-            serviceContext->getFastClockSource(), "Magic restore", &startupTimeElapsedBuilder);
-        if (getMagicRestoreMain() == nullptr) {
-            LOGV2_ERROR(7180701, "--magicRestore cannot be used with a community build");
-            exitCleanly(ExitCode::badOptions);
-        }
-        return getMagicRestoreMain()(serviceContext);
     }
 
     globalServerLifecycleMonitor().onFinishingStartup();

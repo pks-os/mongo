@@ -1063,6 +1063,8 @@ void ReplicationCoordinatorImpl::_startDataReplication(OperationContext* opCtx) 
 void ReplicationCoordinatorImpl::startup(OperationContext* opCtx,
                                          StorageEngine::LastShutdownState lastShutdownState) {
     if (!_settings.isReplSet()) {
+        // We do not need to check for magic restore since magic restore always runs in a replica
+        // set.
         if (ReplSettings::shouldRecoverFromOplogAsStandalone()) {
             uassert(ErrorCodes::InvalidOptions,
                     str::stream() << "Cannot set parameter 'recoverToOplogTimestamp' "
@@ -2065,11 +2067,7 @@ Status ReplicationCoordinatorImpl::waitUntilMajorityOpTime(mongo::OperationConte
                 1,
                 "waitUntilOpTime: waiting for target OpTime to be in a snapshot",
                 "targetOpTime"_attr = targetOpTime,
-                "currentCommittedSnapshotOpTime"_attr = _getCurrentCommittedSnapshotOpTime(lock));
-
-    LOGV2_DEBUG(21335,
-                3,
-                "waitUntilOpTime: waiting for a new snapshot",
+                "currentCommittedSnapshotOpTime"_attr = _getCurrentCommittedSnapshotOpTime(lock),
                 "deadline"_attr = deadline.value_or(opCtx->getDeadline()));
 
     try {

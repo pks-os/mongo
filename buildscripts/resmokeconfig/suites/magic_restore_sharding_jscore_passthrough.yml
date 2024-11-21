@@ -35,9 +35,11 @@ selector:
     # we expect a second drop to return status OK.
     - jstests/core/**/explain_upsert.js
 
-    # Uses a view with projected out _id which causes data consistency diffs due to natural order differences between primary and secondary nodes from parallel oplog application.
+    # Uses a view with projected out _id which causes data consistency diffs due to natural order
+    # differences between primary and secondary nodes from parallel oplog application.
     - jstests/core/views/views_find.js
     - jstests/core/views/views_aggregation.js
+    - jstests/core/query/bson_size_limit.js
 
     # Int types within an array type in BSON get their type changed when passed into a C++ function from Javascript.
     - jstests/core/query/type/type_array.js
@@ -64,6 +66,14 @@ selector:
     - jstests/core/views/views_validation.js
     - jstests/core/txns/no_writes_to_config_transactions_with_prepared_transaction.js
     - jstests/core/catalog/list_collections_no_views.js
+
+    # Expects to successfully drop invalid views. As drops are no-oped, the leftover
+    # invalid views fail the data consistency checker.
+    - jstests/core/timeseries/drop_timeseries.js
+
+    # Fails upsert operations with duplicate key errors due to drops being no-oped.
+    # The test performs these upserts in retryable writes that cause the test to timeout.
+    - jstests/core/write/update/upsert_fields.js
 
   exclude_with_any_tags:
     - assumes_standalone_mongod
