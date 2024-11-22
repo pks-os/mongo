@@ -53,6 +53,7 @@
 #include "mongo/db/admission/execution_admission_context.h"
 #include "mongo/db/admission/ingress_admission_context.h"
 #include "mongo/db/auth/user_name.h"
+#include "mongo/db/catalog/local_oplog_info.h"
 #include "mongo/db/client.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/commands/server_status_metric.h"
@@ -79,6 +80,7 @@
 #include "mongo/transport/service_executor.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/clock_source.h"
+#include "mongo/util/concurrency/ticketholder_queue_stats.h"
 #include "mongo/util/database_name_util.h"
 #include "mongo/util/decorable.h"
 #include "mongo/util/duration.h"
@@ -96,7 +98,6 @@
 namespace mongo {
 
 namespace {
-StringMap<std::function<AdmissionContext*(OperationContext*)>> gQueueMetricsRegistry;
 
 auto& oplogGetMoreStats = *MetricBuilder<TimerStats>("repl.network.oplogGetMoresProcessed");
 
@@ -113,15 +114,6 @@ BSONObj serializeDollarDbInOpDescription(boost::optional<TenantId> tenantId,
                                               dbName, SerializationContext::stateCommandReply(sc)))
                                          .firstElement());
     return newCmdObj;
-}
-
-MONGO_INITIALIZER(InitGlobalQueueLookupTable)(InitializerContext*) {
-    gQueueMetricsRegistry["ingress"] = [](OperationContext* opCtx) {
-        return &IngressAdmissionContext::get(opCtx);
-    };
-    gQueueMetricsRegistry["execution"] = [](OperationContext* opCtx) {
-        return &ExecutionAdmissionContext::get(opCtx);
-    };
 }
 }  // namespace
 
@@ -826,6 +818,47 @@ void appendObjectTruncatingAsNecessary(StringData fieldName,
     buildTruncatedObject(obj, *maxSize, builder);
     truncatedBuilder.doneFast();
 }
+
+/**
+ * Populates the BSONObjBuilder with the queueing statistics of the current operation. Calculates
+ * overall queue stats and records the current queue if the operation is presently queued.
+ */
+void populateCurrentOpQueueStats(OperationContext* opCtx,
+                                 TickSource* tickSource,
+                                 BSONObjBuilder* currOpStats) {
+    boost::optional<std::tuple<TicketHolderQueueStats::QueueType, Microseconds>> currentQueue;
+    BSONObjBuilder queuesBuilder(currOpStats->subobjStart("queues"));
+
+    for (auto&& [queueType, lookup] : TicketHolderQueueStats::getQueueMetricsRegistry()) {
+        AdmissionContext* admCtx = lookup(opCtx);
+        Microseconds totalTimeQueuedMicros = admCtx->totalTimeQueuedMicros();
+
+        if (auto startQueueingTime = admCtx->startQueueingTime()) {
+            Microseconds currentQueueTimeQueuedMicros = tickSource->ticksTo<Microseconds>(
+                opCtx->getServiceContext()->getTickSource()->getTicks() - *startQueueingTime);
+            totalTimeQueuedMicros += currentQueueTimeQueuedMicros;
+            currentQueue = std::make_tuple(queueType, currentQueueTimeQueuedMicros);
+        }
+        BSONObjBuilder queueMetricsBuilder(
+            queuesBuilder.subobjStart(TicketHolderQueueStats::queueTypeToString(queueType)));
+        queueMetricsBuilder.append("admissions", admCtx->getAdmissions());
+        queueMetricsBuilder.append("totalTimeQueuedMicros",
+                                   durationCount<Microseconds>(totalTimeQueuedMicros));
+        queueMetricsBuilder.append("isHoldingTicket", admCtx->isHoldingTicket());
+        queueMetricsBuilder.done();
+    }
+    queuesBuilder.done();
+    if (currentQueue) {
+        BSONObjBuilder currentQueueBuilder(currOpStats->subobjStart("currentQueue"));
+        currentQueueBuilder.append(
+            "name", TicketHolderQueueStats::queueTypeToString(std::get<0>(*currentQueue)));
+        currentQueueBuilder.append("timeQueuedMicros",
+                                   durationCount<Microseconds>(std::get<1>(*currentQueue)));
+        currentQueueBuilder.done();
+    } else {
+        currOpStats->appendNull("currentQueue");
+    }
+};
 }  // namespace
 
 BSONObj CurOp::truncateAndSerializeGenericCursor(GenericCursor cursor,
@@ -971,38 +1004,7 @@ void CurOp::reportState(BSONObjBuilder* builder,
         builder->append("waitForWriteConcernDurationMillis",
                         durationCount<Milliseconds>(elapsedTimeTotal));
     }
-
-    boost::optional<std::tuple<std::string, Microseconds>> currentQueue;
-    BSONObjBuilder queuesBuilder(builder->subobjStart("queues"));
-    for (auto&& [queueName, lookup] : gQueueMetricsRegistry) {
-        AdmissionContext* admCtx = lookup(opCtx);
-        Microseconds totalTimeQueuedMicros = admCtx->totalTimeQueuedMicros();
-
-        if (auto startQueueingTime = admCtx->startQueueingTime()) {
-            Microseconds currentQueueTimeQueuedMicros = computeElapsedTimeTotal(
-                *startQueueingTime, opCtx->getServiceContext()->getTickSource()->getTicks());
-            totalTimeQueuedMicros += currentQueueTimeQueuedMicros;
-            currentQueue = std::make_tuple(queueName, currentQueueTimeQueuedMicros);
-        }
-
-        BSONObjBuilder queueMetricsBuilder(queuesBuilder.subobjStart(queueName));
-        queueMetricsBuilder.append("admissions", admCtx->getAdmissions());
-        queueMetricsBuilder.append("totalTimeQueuedMicros",
-                                   durationCount<Microseconds>(totalTimeQueuedMicros));
-        queueMetricsBuilder.append("isHoldingTicket", admCtx->isHoldingTicket());
-        queueMetricsBuilder.done();
-    }
-    queuesBuilder.done();
-
-    if (currentQueue) {
-        BSONObjBuilder currentQueueBuilder(builder->subobjStart("currentQueue"));
-        currentQueueBuilder.append("name", std::get<0>(*currentQueue));
-        currentQueueBuilder.append("timeQueuedMicros",
-                                   durationCount<Microseconds>(std::get<1>(*currentQueue)));
-        currentQueueBuilder.done();
-    } else {
-        builder->appendNull("currentQueue");
-    }
+    populateCurrentOpQueueStats(opCtx, _tickSource, builder);
 }
 
 CurOp::AdditiveResourceStats CurOp::getAdditiveResourceStats(
@@ -1165,7 +1167,9 @@ void OpDebug::report(OperationContext* opCtx,
         pAttrs->add("placementVersionRefreshDuration", placementVersionRefreshMillis);
     }
 
-    if (totalOplogSlotDurationMicros > Microseconds::zero()) {
+    if (const auto& totalOplogSlotDurationMicros =
+            LocalOplogInfo::get(opCtx)->getTotalOplogSlotDurationMicros();
+        totalOplogSlotDurationMicros > Microseconds::zero()) {
         pAttrs->add("totalOplogSlotDuration", totalOplogSlotDurationMicros);
     }
 
@@ -1326,21 +1330,9 @@ void OpDebug::report(OperationContext* opCtx,
         pAttrs->add("remoteOpWaitMillis", durationCount<Milliseconds>(*remoteOpWaitTime));
     }
 
-    BSONObjBuilder queuesBuilder;
-    for (auto&& [queueName, lookup] : gQueueMetricsRegistry) {
-        AdmissionContext* admCtx = lookup(opCtx);
-        BSONObjBuilder bb;
-        if (auto admissions = admCtx->getAdmissions(); admissions > 0) {
-            bb.append("admissions", admissions);
-        }
-        if (auto queued = durationCount<Microseconds>(admCtx->totalTimeQueuedMicros());
-            queued > 0) {
-            bb.append("totalTimeQueuedMicros", queued);
-        }
-        queuesBuilder.append(queueName, bb.obj());
-    }
-
-    pAttrs->add("queues", queuesBuilder.obj());
+    // Extract admisson and execution control queueing stats from AdmissionContext stored on opCtx
+    TicketHolderQueueStats queueingStats(opCtx);
+    pAttrs->add("queues", queueingStats.toBson());
 
     // workingMillis should always be present for any operation
     pAttrs->add("workingMillis", workingTimeMillis.count());
@@ -1550,7 +1542,9 @@ void OpDebug::append(OperationContext* opCtx,
 
     OPDEBUG_APPEND_OPTIONAL(b, "estimatedCardinality", estimatedCardinality);
 
-    if (totalOplogSlotDurationMicros > Microseconds::zero()) {
+    if (const auto& totalOplogSlotDurationMicros =
+            LocalOplogInfo::get(opCtx)->getTotalOplogSlotDurationMicros();
+        totalOplogSlotDurationMicros > Microseconds::zero()) {
         b.appendNumber("totalOplogSlotDurationMicros",
                        durationCount<Microseconds>(totalOplogSlotDurationMicros));
     }
@@ -1900,9 +1894,10 @@ std::function<BSONObj(ProfileFilter::Args)> OpDebug::appendStaged(StringSet requ
     });
 
     addIfNeeded("totalOplogSlotDurationMicros", [](auto field, auto args, auto& b) {
-        if (args.op.totalOplogSlotDurationMicros > Nanoseconds::zero()) {
-            b.appendNumber(field,
-                           durationCount<Microseconds>(args.op.totalOplogSlotDurationMicros));
+        if (const auto& totalOplogSlotDurationMicros =
+                LocalOplogInfo::get(args.opCtx)->getTotalOplogSlotDurationMicros();
+            totalOplogSlotDurationMicros > Microseconds::zero()) {
+            b.appendNumber(field, durationCount<Microseconds>(totalOplogSlotDurationMicros));
         }
     });
 

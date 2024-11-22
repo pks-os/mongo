@@ -30,12 +30,11 @@
 #pragma once
 
 #include "mongo/base/status.h"
-#include "mongo/bson/bson_validate.h"
-#include "mongo/bson/bsonobjbuilder.h"
-#include "mongo/db/namespace_string.h"
+#include "mongo/db/catalog/validate/validate_options.h"
 
 namespace mongo {
 
+class NamespaceString;
 class OperationContext;
 class Collection;
 class CollectionPtr;
@@ -44,131 +43,6 @@ class Status;
 class ValidateResults;
 
 namespace CollectionValidation {
-
-enum class ValidateMode {
-    // Only performs validation on the collection metadata.
-    kMetadata,
-    // Does the above, plus checks a collection's data and indexes for correctness in a non-blocking
-    // manner using an intent collection lock.
-    kBackground,
-    // Does the above, plus checks BSON documents more thoroughly.
-    kBackgroundCheckBSON,
-    // Does the above, but in a blocking manner using an exclusive collection lock.
-    kForeground,
-
-    // The standard foreground validation above, plus a full validation of the underlying
-    // SortedDataInterface using the storage engine's validation functionality. For WiredTiger,
-    // this results in a call to verify() for each index.
-    //
-    // This mode is only used by repair to avoid revalidating the record store.
-    kForegroundFullIndexOnly,
-
-    // The standard foreground validation above, plus a more thorough BSON document validation.
-    kForegroundCheckBSON,
-
-    // The full index validation and more thorough BSON document validation above, plus a full
-    // validation of the underlying record store using the storage engine's validation
-    // functionality. For WiredTiger, this results in a call to
-    // verify().
-    kForegroundFull,
-
-    // The full index, BSON document, and record store validation above, plus enforce that the fast
-    // count is equal to the number of records (as opposed to correcting the fast count if it is
-    // incorrect).
-    kForegroundFullEnforceFastCount,
-};
-
-/**
- * RepairMode indicates whether validate should repair the data inconsistencies it detects.
- *
- * When set to kFixErrors, if any validation errors are detected, repairs are attempted and the
- * 'repaired' flag in ValidateResults will be set to true. If all errors are fixed, then 'valid'
- * will also be set to true. kFixErrors is incompatible with the ValidateModes kBackground and
- * kForegroundFullEnforceFastCount. This implies kAdjustMultikey.
- *
- * When set to kAdjustMultikey, if any permissible, yet undesirable multikey inconsistencies are
- * detected, then the multikey metadata will be adjusted. The 'repaired' flag will be set if any
- * adjustments have been made. This is incompatible with background validation.
- */
-enum class RepairMode {
-    kNone,
-    kFixErrors,
-    kAdjustMultikey,
-};
-
-/**
- * Additional validation options that can run in any mode.
- */
-class ValidationOptions {
-public:
-    ValidationOptions(ValidateMode validateMode,
-                      RepairMode repairMode,
-                      bool logDiagnostics,
-                      ValidationVersion validationVersion = currentValidationVersion);
-
-    virtual ~ValidationOptions() = default;
-
-    bool isMetadataValidation() const {
-        return _validateMode == ValidateMode::kMetadata;
-    }
-
-    bool isBackground() const {
-        return _validateMode == ValidateMode::kBackground ||
-            _validateMode == ValidateMode::kBackgroundCheckBSON;
-    }
-
-    bool isFullValidation() const {
-        return _validateMode == ValidateMode::kForegroundFull ||
-            _validateMode == ValidateMode::kForegroundFullEnforceFastCount;
-    }
-
-    bool isFullIndexValidation() const {
-        return isFullValidation() || _validateMode == ValidateMode::kForegroundFullIndexOnly;
-    }
-
-    bool isBSONConformanceValidation() const {
-        return isFullValidation() || _validateMode == ValidateMode::kBackgroundCheckBSON ||
-            _validateMode == ValidateMode::kForegroundCheckBSON;
-    }
-
-    /**
-     * Returns true iff the validation was *asked* to enforce the fast count, whether it actually
-     * does depends on what collection is being validated and what the other options are. See
-     * ValidateState::shouldEnforceFastCount().
-     */
-    bool enforceFastCountRequested() const {
-        return _validateMode == ValidateMode::kForegroundFullEnforceFastCount;
-    }
-
-    bool fixErrors() const {
-        return _repairMode == RepairMode::kFixErrors;
-    }
-
-    bool adjustMultikey() const {
-        return _repairMode == RepairMode::kFixErrors || _repairMode == RepairMode::kAdjustMultikey;
-    }
-
-    /**
-     * Indicates whether extra logging should occur during validation.
-     */
-    bool logDiagnostics() {
-        return _logDiagnostics;
-    }
-
-    ValidationVersion validationVersion() const {
-        return _validationVersion;
-    }
-
-private:
-    const ValidateMode _validateMode;
-
-    const RepairMode _repairMode;
-
-    // Can be set to obtain better insight into what validate sees/does.
-    const bool _logDiagnostics;
-
-    const ValidationVersion _validationVersion;
-};
 
 /**
  * Expects the caller to hold no locks.

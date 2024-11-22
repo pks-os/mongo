@@ -32,6 +32,7 @@ To perform other operations, consult the table below.
 | --uri <MDBConnString>            | The address at which to connect to a mongod/mongos. Defaults to localhost::27017. Uses the MongoDB URI format                                                                                                                                                                                                                                                                                                                                                                                         |
 | -n <int>                         | Run a specific test in the file immediately preceding this -n argument. Invalid if not following a -t <testName> pair                                                                                                                                                                                                                                                                                                                                                                                 |
 | -r <int> <int>                   | Run a range of tests in the file immediately preceding this -r argument. Invalid if not following a -t <testName> pair                                                                                                                                                                                                                                                                                                                                                                                |
+| -v (verbose)                     | Only available in compare mode. Extracts metadata about most common features across failed queries for an enriched debugging experience. Note that this uses the [feature-extractor](https://github.com/10gen/feature-extractor), which must be present in the user's home directory.                                                                                                                                                                                                                 |
 | --drop                           | Drops the collections needed by the tests to be run before running.                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | --load                           | Builds indexes and inserts documents into the collections needed by the specified test files. If not specified assumes the collection state is correct                                                                                                                                                                                                                                                                                                                                                |
 | --mode [run, compare, normalize] | Specify whether to just run the tests, to also compare results (default), or only check that results are normalized. Just running is useful to generate result files. In 'run' mode tests will not fail unless a command fails.                                                                                                                                                                                                                                                                       |
@@ -76,7 +77,12 @@ These have the same format as .test files above, with the exception that each te
 
 See sampleTests/basic.coll
 These files are split into two sections divided by an empty line.
-Above the empty line are index definitions, one per line.
+Above the empty line are index definitions, one per line. They can be of the form:
+
+1. `{<index>}`, or
+2. `{key: <index>}`, or
+3. `{key: <index>, options: <indexOptions>}`
+
 Below the empty line are documents, one per line.
 
 These files are referenced by test files, and can/should be shared across tests.
