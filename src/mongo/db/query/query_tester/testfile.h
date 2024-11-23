@@ -103,16 +103,19 @@ public:
     /**
      * If 'compare' is set, tests must have results to compare to.
      */
-    bool textBasedCompare(const std::filesystem::path&, const std::filesystem::path&, bool verbose);
+    bool textBasedCompare(const std::filesystem::path&,
+                          const std::filesystem::path&,
+                          ErrorLogLevel);
 
     /**
      * If 'compare' is set, tests must have results to compare to.
      */
-    bool writeAndValidate(ModeOption, WriteOutOptions, bool verbose);
+    bool writeAndValidate(ModeOption, WriteOutOptions, ErrorLogLevel);
 
     bool writeOutAndNumber(std::fstream&, WriteOutOptions);
 
-    void writeOutHeader(std::fstream& fs) const;
+    template <bool IncludeComments>
+    void writeOutHeader(std::fstream&) const;
 
 protected:
     void parseHeader(std::fstream& fs);

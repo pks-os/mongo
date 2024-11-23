@@ -5,8 +5,6 @@
  * @tags: [
  *   requires_timeseries,
  *   featureFlagTimeseriesUpdatesSupport,
- *   # Needed to run createUnsplittableCollection
- *   featureFlagAuthoritativeShardCollection,
  *   requires_fcv_80
  * ]
  */
@@ -22,10 +20,7 @@ const st = new ShardingTest({
 
 runTimeseriesRetryDeleteAndUpdateTest(
     st.s,
-    function(db, coll, metaFieldName) {
-        assert.commandWorked(
-            db.adminCommand({shardCollection: coll.getFullName(), key: {[metaFieldName]: 1}}));
-    },
+    function(db, coll, metaFieldName) {},
     function(db, retriedCommandsCount, statementsRetried) {
         const transactionsServerStatus = st.shard0.getDB(db.getName()).serverStatus().transactions;
 

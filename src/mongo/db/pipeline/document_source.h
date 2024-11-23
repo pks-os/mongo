@@ -221,6 +221,7 @@ enum class DocumentSourceType {
     kInternalDensify,                       // DocumentSourceInternalDensify
     kInternalGeoNearDistance,               // DocumentSourceInternalGeoNearDistance
     kInternalInhibitOptimization,           // DocumentSourceInternalInhibitOptimization
+    kInternalListCollections,               // DocumentSourceInternalListCollections
     kInternalProjection,                    // DocumentSourceInternalProjection
     kInternalReplaceRoot,                   // DocumentSourceInternalReplaceRoot
     kInternalSearchIdLookUp,                // DocumentSourceInternalSearchIdLookUp
@@ -268,7 +269,7 @@ enum class DocumentSourceType {
     kValidateStub,                          // DocumentSourceValidateStub
     kVectorSearch,                          // DocumentSourceVectorSearch
     kWindowStub,                            // DocumentSourceWindowStub
-    kExternalApi,                           // DocumentSourceExternalApiStub
+    kHttps,                                 // DocumentSourceHttpsStub
 };
 
 class DocumentSource : public RefCountable {

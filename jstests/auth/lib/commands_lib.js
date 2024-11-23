@@ -7921,10 +7921,10 @@ export const authCommandsLib = {
           testcases: testcases_transformationOnly,
         },
         {
-          testname: "aggregate_$externalAPI",
+          testname: "aggregate_$https",
           command: {
               aggregate: "foo",
-              pipeline: [{$externalAPI: {}}],
+              pipeline: [{$https: {}}],
               cursor: {},
           },
           // TODO SERVER-74961: Windows is not yet supported in stream processing.
@@ -8415,6 +8415,22 @@ export const authCommandsLib = {
         },
         testcases: testcases_transformationOnlyExpectFail,
       },
+      {
+        testname: "aggregate_internal_list_collections",
+        command: {aggregate: 1, pipeline: [{$_internalListCollections: {}}], cursor: {}},
+        testcases: [
+          {
+            runOnDb: adminDbName,
+            roles: {__system: 1},
+            privileges: [{resource: {cluster: true}, actions: ["internal"]}]
+          },
+          {
+            runOnDb: firstDbName,
+            roles: {__system: 1},
+            privileges: [{resource: {cluster: true}, actions: ["internal"]}]
+          },
+        ]
+      }
     ],
 
     /************* SHARED TEST LOGIC ****************/

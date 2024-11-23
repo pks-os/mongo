@@ -21,18 +21,19 @@ mongo_cc_library(
         "ce_utils",
         "estimates",
         "heuristic_estimator",
+        "//src/mongo/db/query:index_bounds_builder",
         "//src/mongo/db/query/ce:histogram_estimator",
         "//src/mongo/db/query/stats:collection_statistics_interface",
     ],
 )
 
 mongo_cc_library(
-    name = "qsn_estimator",
+    name = "cost_estimator",
     srcs = [
-        "qsn_estimator.cpp",
+        "cost_estimator.cpp",
     ],
     hdrs = [
-        "qsn_estimator.h",
+        "cost_estimator.h",
         "//src/mongo/db/query:query_solution.h",
     ],
     deps = [
