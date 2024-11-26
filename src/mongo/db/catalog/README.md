@@ -1939,6 +1939,8 @@ A new truncate marker is created when the in-progress marker segment contains mo
 complete the segment; and the oldest truncate marker's oplog is deleted when the oplog size exceeds
 its cap size setting.
 
+Oplog sampling and marker generation is skipped when using `--restore` or `--magicRestore`.
+
 ### Special Timestamps That Will Not Be Truncated
 
 The WiredTiger integration layer's `OplogTruncateMarkers` implementation will stall deletion waiting for
@@ -2175,6 +2177,23 @@ Secondary indexes append `RecordId`s to the end of the `KeyString`. Because a `R
 clustered collection can be arbitrarily long, its size is appended at the end and [encoded](https://github.com/mongodb/mongo/blob/r5.2.0/src/mongo/db/storage/key_string.cpp#L608)
 right-to-left over up to 4 bytes, using the lower 7 bits of a byte, the high bit serving as a
 continuation bit.
+
+## Legacy Catalog Formats That Still Require Support
+
+### Legacy Indexes
+
+We perform stricter checks in index key pattern validation to v:2 indexes, limiting indexes created
+in MongoDB 3.4+ to the following:
+
+- numbers > 0 (ascending)
+- numbers < 0 (descending)
+- strings (special index types)
+
+However, legacy indexes (indexes that were created pre-3.4) still need to be handled in the case
+where a customer with legacy indexes upgrades to MongoDB 3.4+. The server treats any non-negative
+numerical index key and non-numerical index key value as an ascending index, and treats negative
+numerical values as descending. The exception to this is any form of a negative 0 (-0, -0.0, etc);
+these are treated as ascending. Details on how these values are treated can be found in [ordering.h](https://github.com/10gen/mongo/blob/master/src/mongo/bson/ordering.h), and examples of legacy indexes can be found in [this test](https://github.com/10gen/mongo/blob/master/src/mongo/bson/ordering_test.cpp).
 
 # Glossary
 
