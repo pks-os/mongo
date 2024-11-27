@@ -87,8 +87,10 @@ void attemptToSetTransportLayerManager() {
     if (!res.isOK()) {
         static constexpr auto kMaxReattempts = 5;
         static constexpr auto kWobbleRange = 50;
-        auto wobbleGenerator =
-            PseudoRandom(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
+        auto wobbleGenerator = PseudoRandom(
+            std::chrono::time_point_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now())
+                .time_since_epoch()
+                .count());
         for (auto reattempts = 0, sleepTime = 100; !res.isOK() && reattempts < kMaxReattempts;
              ++reattempts, sleepTime += sleepTime) {
             sleepTime += wobbleGenerator.nextInt64(kWobbleRange);
@@ -152,7 +154,7 @@ int runTestProgram(const std::vector<TestSpec> testsToRun,
     auto versionInfo = MockVersionInfo{};
     auto conn = buildConn(uriString, &versionInfo, mode);
     // Track collections loaded in the previous test file.
-    auto prevFileCollections = std::set<std::string>{};
+    auto prevFileCollections = std::set<CollectionSpec>{};
     auto failedTestFiles = std::vector<std::filesystem::path>{};
     auto failedQueryCount = size_t{0};
     auto totalTestsRun = size_t{0};

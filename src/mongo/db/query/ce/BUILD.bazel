@@ -20,8 +20,19 @@ mongo_cc_library(
         "histogram_estimation_impl.h",
         "histogram_estimator.h",
     ],
+    no_undefined_ref_DO_NOT_USE = False,
     deps = [
         "//src/mongo/db/query/cost_based_ranker:estimates",
         "//src/mongo/db/query/stats:stats_histograms",
+    ],
+)
+
+mongo_cc_library(
+    name = "sampling_estimator_interface",
+    hdrs = [
+        "sampling_estimator.h",
+    ],
+    deps = [
+        "//src/mongo/db:query_expressions",
     ],
 )
