@@ -486,6 +486,12 @@ def bazel_build_thread_func(env, log_dir: str, verbose: bool, ninja_generate: bo
         bazel_cmd = Globals.bazel_base_build_command + extra_args + ["//:compiledb", "//src/..."]
 
     else:
+        build_tags = env.GetOption("bazel-build-tag")
+        if not build_tags:
+            build_tags += ["all"]
+        if "all" not in build_tags:
+            build_tags += ["scons_link_lists", "gen_source"]
+            extra_args += [f"--build_tag_filters={','.join(build_tags)}"]
         bazel_cmd = Globals.bazel_base_build_command + extra_args + ["//src/..."]
 
     if ninja_generate:
@@ -813,8 +819,6 @@ def auto_archive_bazel(env, node, already_archived, search_stack):
         try:
             bazel_child = env["SCONS2BAZEL_TARGETS"].bazel_output(bazel_child.path)
         except KeyError:
-            if env.Verbose():
-                print("BazelAutoArchive not processing non bazel target:\n{bazel_child}}")
             return
 
     if str(bazel_child) not in already_archived:
@@ -1014,14 +1018,8 @@ common --bes_keywords=engflow:BuildScmStatus={status}
 
 def setup_bazel_env_vars() -> None:
     # Set the JAVA_HOME directories for ppc64le and s390x since their bazel binaries are not compiled with a built-in JDK.
-    if platform.machine().lower() == "ppc64le":
-        Globals.bazel_env_variables["JAVA_HOME"] = (
-            "/usr/lib/jvm/java-21-openjdk-21.0.4.0.7-1.el8.ppc64le"
-        )
-    elif platform.machine().lower() == "s390x":
-        Globals.bazel_env_variables["JAVA_HOME"] = (
-            "/usr/lib/jvm/java-21-openjdk-21.0.4.0.7-1.el8.s390x"
-        )
+    if platform.machine().lower() in {"ppc64le", "s390x"}:
+        Globals.bazel_env_variables["JAVA_HOME"] = "/usr/lib/jvm/java-21-openjdk"
 
 
 def setup_max_retry_attempts() -> None:

@@ -325,6 +325,7 @@ mongo_cc_library(
         "plan_ranker_mode.cpp",
         "query_feature_flags_gen",
         "query_knobs_gen",
+        "sampling_confidence_interval.cpp",
         "//src/mongo/db/query/plan_cache:sbe_plan_cache_on_parameter_change.cpp",
         "//src/mongo/db/query/query_stats:query_stats_on_parameter_change.cpp",
     ],
@@ -652,6 +653,7 @@ mongo_cc_unit_test(
         "command_diagnostic_printer_test.cpp",
         "//src/mongo/db/query:command_diagnostic_printer.h",
     ],
+    tags = ["mongo_unittest_second_group"],
     deps = [
         "//src/mongo/db:commands",
         "//src/mongo/db:service_context_test_fixture",

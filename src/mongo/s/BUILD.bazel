@@ -746,6 +746,7 @@ mongo_cc_library(
         "//src/mongo/s/write_ops:write_op.h",
         "//src/mongo/s/write_ops:write_without_shard_key_util.h",
     ],
+    no_undefined_ref_DO_NOT_USE = False,
     deps = [
         ":sharding_router_api",
         "//src/mongo/db:fle_crud",
@@ -760,7 +761,7 @@ mongo_cc_library(
         "//src/mongo/db/timeseries:timeseries_conversion_util",
         "//src/mongo/db/timeseries:timeseries_metadata",
         "//src/mongo/db/timeseries:timeseries_options",
-        "//src/mongo/db/timeseries:timeseries_write_util",
+        "//src/mongo/db/timeseries/write_ops:timeseries_write_ops_utils",
         "//src/mongo/db/transaction:transaction_api",
         "//src/mongo/executor:inline_executor",
         "//src/mongo/s/query/planner:cluster_find",
@@ -1006,6 +1007,10 @@ mongo_cc_binary(
         ],
         "//conditions:default": [],
     }),
+    tags = [
+        "devcore",
+        "dist_test",
+    ],
     #+ env.WindowsResourceFile("mongos.rc"),
     deps = [
         # NOTE: Do not add new deps here unless required by the linker to

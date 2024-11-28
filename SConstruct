@@ -639,6 +639,13 @@ add_option(
 )
 
 add_option(
+    "bazel-build-tag",
+    default=[],
+    action="append",
+    help="Specify additional tags to aggregate for --build_tag_filters",
+)
+
+add_option(
     "streams-release-build",
     default=False,
     action="store_true",
@@ -3905,6 +3912,10 @@ def doConfigure(myenv):
         # TODO SERVER-58675 - Remove this suppression after abseil is upgraded
         myenv.AddToCXXFLAGSIfSupported("-Wno-deprecated-builtins")
 
+        # We do not define an ABI that must be stable from build to build, so inconsistent hardware
+        # interference sizes between builds does not affect correctness.
+        myenv.AddToCXXFLAGSIfSupported("-Wno-interference-size")
+
         # Check if we can set "-Wnon-virtual-dtor" when "-Werror" is set. The only time we can't set it is on
         # clang 3.4, where a class with virtual function(s) and a non-virtual destructor throws a warning when
         # it shouldn't.
@@ -6681,8 +6692,7 @@ if env.get("__NINJA_NO") != "1":
                         env.GetAutoInstalledFiles(bazel_libdep),
                     )
             except KeyError:
-                if env.Verbose():
-                    print(f"BazelAutoInstall not processing non bazel target:\n{libdep_node}")
+                pass
 
         return target, source
 
