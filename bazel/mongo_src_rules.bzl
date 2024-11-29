@@ -1415,7 +1415,6 @@ def mongo_cc_library(
         additional_linker_inputs = [],
         features = [],
         exec_properties = {},
-        no_undefined_ref_DO_NOT_USE = True,
         **kwargs):
     """Wrapper around cc_library.
 
@@ -1550,17 +1549,6 @@ def mongo_cc_library(
         "//bazel/config:windows_x86_64": [],
     })
 
-    if no_undefined_ref_DO_NOT_USE:
-        undefined_ref_flag = select({
-            "//bazel/config:sanitize_address_required_settings": [],
-            "//bazel/config:sanitize_thread_required_settings": [],
-            "@platforms//os:macos": [],
-            "@platforms//os:windows": [],
-            "//conditions:default": ["-Wl,-z,defs"],
-        })
-    else:
-        undefined_ref_flag = []
-
     create_header_dep(
         name = name + HEADER_DEP_SUFFIX,
         header_deps = header_deps,
@@ -1636,7 +1624,7 @@ def mongo_cc_library(
         deps = [name + WITH_DEBUG_SUFFIX],
         visibility = visibility,
         tags = tags,
-        user_link_flags = MONGO_GLOBAL_LINKFLAGS + package_specific_linkflags + undefined_ref_flag + non_transitive_dyn_linkopts + rpath_flags + visibility_support_shared_flags,
+        user_link_flags = MONGO_GLOBAL_LINKFLAGS + package_specific_linkflags + non_transitive_dyn_linkopts + rpath_flags + visibility_support_shared_flags,
         target_compatible_with = select({
             "//bazel/config:linkstatic_disabled": [],
             "//conditions:default": ["@platforms//:incompatible"],
@@ -1654,7 +1642,7 @@ def mongo_cc_library(
         name = name,
         binary_with_debug = ":" + name + WITH_DEBUG_SUFFIX,
         type = "library",
-        tags = tags + ["mongo_library"],
+        tags = tags,
         enabled = SEPARATE_DEBUG_ENABLED,
         enable_pdb = PDB_GENERATION_ENABLED,
         cc_shared_library = select({
@@ -1889,7 +1877,7 @@ def mongo_cc_binary(
         testonly,
         visibility,
         data,
-        tags + ["mongo_binary"],
+        tags,
         copts,
         linkopts,
         includes,
@@ -1990,16 +1978,15 @@ def mongo_cc_unit_test(
         additional_linker_inputs = [],
         features = [],
         exec_properties = {},
-        has_custom_mainline = False,
         **kwargs):
     mongo_cc_test(
         name = name,
         srcs = srcs,
-        deps = deps + ([] if has_custom_mainline else ["//src/mongo/unittest:unittest_main"]),
+        deps = deps + ["//src/mongo/unittest:unittest_main"],
         header_deps = header_deps,
         visibility = visibility,
         data = data,
-        tags = tags + ["mongo_unittest"],
+        tags = tags,
         copts = copts,
         linkopts = linkopts,
         includes = includes,
@@ -2216,12 +2203,10 @@ dummy_file = rule(
 def mongo_proto_library(
         name,
         srcs,
-        tags = [],
         **kwargs):
     proto_library(
         name = name,
         srcs = srcs,
-        tags = tags + ["gen_source"],
         **kwargs
     )
 
@@ -2234,12 +2219,10 @@ def mongo_proto_library(
 def mongo_cc_proto_library(
         name,
         deps,
-        tags = [],
         **kwargs):
     native.cc_proto_library(
         name = name + "_raw",
         deps = deps,
-        tags = tags + ["gen_source"],
         **kwargs
     )
     strip_deps(
@@ -2256,7 +2239,6 @@ def mongo_cc_grpc_library(
         proto_only = False,
         well_known_protos = False,
         generate_mocks = False,
-        tags = [],
         **kwargs):
     codegen_grpc_target = "_" + name + "_grpc_codegen"
     generate_cc(
@@ -2265,7 +2247,6 @@ def mongo_cc_grpc_library(
         plugin = "//src/third_party/grpc:grpc_cpp_plugin",
         well_known_protos = well_known_protos,
         generate_mocks = generate_mocks,
-        tags = tags + ["gen_source"],
         **kwargs
     )
 

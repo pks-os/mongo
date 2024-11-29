@@ -629,7 +629,7 @@ connection_runtime_config = [
             if true, control all dirty page evictions through forcing update restore eviction.''',
             type='boolean'),
         Config('eviction_checkpoint_ts_ordering', 'false', r'''
-            if true, act as if eviction is being run in parallel to checkpoint. We should return 
+            if true, act as if eviction is being run in parallel to checkpoint. We should return
             EBUSY in eviction if we detect any timestamp ordering issue.''',
             type='boolean'),
         ]),
@@ -652,6 +652,12 @@ connection_runtime_config = [
                 If no in-memory ref is found on the root page, attempt to locate a random
                 in-memory page by examining all entries on the root page.''',
                 type='boolean'),
+            Config('evict_use_softptr', 'false', r'''
+                Experimental: Use "soft pointers" instead of hard hazard
+                pointers in eviction server to remember its walking position in the tree. This might
+                be preferable to set to "true" if there are many collections. It can improve or
+                degrade performance depending on the workload.''',
+                type='boolean', undoc=True),
             ]),
     Config('eviction_checkpoint_target', '1', r'''
         perform eviction at the beginning of checkpoints to bring the dirty content in cache
@@ -806,6 +812,16 @@ connection_runtime_config = [
                 the name of a directory into which operation tracking files are written. The
                 directory must already exist. If the value is not an absolute path, the path
                 is relative to the database home (see @ref absolute_path for more information)'''),
+        ]),
+    Config('rollback_to_stable', '', r'''
+        rollback tables to an earlier point in time, discarding all updates to checkpoint durable
+        tables that have durable times more recent than the current global stable timestamp''',
+        type='category', subconfig=[
+            Config('threads', 4, r'''
+                maximum number of threads WiredTiger will start to help RTS. Each
+                RTS worker thread uses a session from the configured WT_RTS_MAX_WORKERS''',
+                min=0,
+                max=10),    # !!! Must match WT_RTS_MAX_WORKERS
         ]),
     Config('shared_cache', '', r'''
         shared cache configuration options. A database should configure either a cache_size
@@ -2012,8 +2028,9 @@ methods = {
         type='boolean'),
     Config('threads', '4', r'''
         maximum number of threads WiredTiger will start to help RTS. Each
-        RTS worker thread uses a session from the configured session_max''',
-        min=0, max=10),
+        RTS worker thread uses a session from the configured WT_RTS_MAX_WORKERS''',
+        min=0, 
+        max=10),     # !!! Must match WT_RTS_MAX_WORKERS
 ]),
 
 'WT_SESSION.reconfigure' : Method(session_config),

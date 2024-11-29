@@ -1072,7 +1072,6 @@ mongo_cc_library(
         "//src/mongo/db/query:plan_yield_policy_impl.cpp",
         "//src/mongo/db/query:plan_yield_policy_sbe.cpp",
         "//src/mongo/db/query:query_planner_params.cpp",
-        "//src/mongo/db/query:sbe_plan_ranker.cpp",
         "//src/mongo/db/query:sbe_trial_runtime_executor.cpp",
         "//src/mongo/db/query:shard_filterer_factory_impl.cpp",
         "//src/mongo/db/query:wildcard_multikey_paths.cpp",
@@ -3391,10 +3390,7 @@ mongo_cc_binary(
         ],
         "//conditions:default": [],
     }),
-    tags = [
-        "devcore",
-        "dist_test",
-    ],
+    # tags = ["compile_requires_large_memory_gcc"],
     #+ env.WindowsResourceFile("mongod.rc"),
     deps = [
         # NOTE: Do not add new deps here unless required by the linker to
