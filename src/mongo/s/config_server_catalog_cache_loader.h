@@ -42,20 +42,9 @@
 
 namespace mongo {
 
-class ConfigServerCatalogCacheLoader final : public CatalogCacheLoader {
+class ConfigServerCatalogCacheLoader : public CatalogCacheLoader {
 public:
-    ConfigServerCatalogCacheLoader();
     ~ConfigServerCatalogCacheLoader() override = default;
-
-    void shutDown() override;
-
-    SemiFuture<CollectionAndChangedChunks> getChunksSince(const NamespaceString& nss,
-                                                          ChunkVersion version) override;
-    SemiFuture<DatabaseType> getDatabase(const DatabaseName& dbName) override;
-
-private:
-    // Thread pool to be used to perform metadata load
-    std::shared_ptr<ThreadPool> _executor;
 };
 
 }  // namespace mongo

@@ -71,8 +71,7 @@ build --flag_alias=ssl=//bazel/config:ssl
 build --flag_alias=js_engine=//bazel/config:js_engine
 build --flag_alias=use_sasl_client=//bazel/config:use_sasl_client
 build --flag_alias=enterprise_feature_all=//bazel/config:enterprise_feature_all
-build --flag_alias=enterprise_feature_all=//bazel/config:enterprise_feature_all
-build --flag_alias=enterprise_feature_all=//bazel/config:enterprise_feature_all
+build --flag_alias=link_timeout_5min=//bazel/config:link_timeout_5min
 
 build --flag_alias=dwarf_version=//bazel/config:dwarf_version
 build --flag_alias=http_client=//bazel/config:http_client
@@ -178,6 +177,10 @@ build:public-release --tls_client_key=
 build:public-release --remote_cache_compression=false
 build:public-release --grpc_keepalive_time=0s
 build:public-release --legacy_important_outputs
+
+--config=fission
+build:fission --fission=yes
+build:fission --remote_download_all
 
 # Avoid failing builds when BES metadata fails to upload.
 common --bes_upload_mode=fully_async

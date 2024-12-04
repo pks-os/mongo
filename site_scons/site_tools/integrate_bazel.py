@@ -109,6 +109,11 @@ class Globals:
     # Flag to signal that scons is ready to build, but needs to wait on bazel
     waiting_on_bazel_flag: bool = False
 
+    # Flag to signal that scons is ready to build, but needs to wait on bazel
+    bazel_build_success: bool = False
+
+    bazel_build_exitcode: int = 1
+
     # a IO object to hold the bazel output in place of stdout
     bazel_thread_terminal_output = StringIO()
 
@@ -400,6 +405,8 @@ def perform_tty_bazel_build(bazel_cmd: str) -> None:
             bazel_proc.kill()
         bazel_proc.wait()
 
+    Globals.bazel_build_exitcode = bazel_proc.returncode
+
     if bazel_proc.returncode != 0:
         raise subprocess.CalledProcessError(bazel_proc.returncode, bazel_cmd, "", "")
 
@@ -421,6 +428,7 @@ def perform_non_tty_bazel_build(bazel_cmd: str) -> None:
 
     stdout, stderr = bazel_proc.communicate()
 
+    Globals.bazel_build_exitcode = bazel_proc.returncode
     if bazel_proc.returncode != 0:
         raise subprocess.CalledProcessError(bazel_proc.returncode, bazel_cmd, stdout, stderr)
 
@@ -451,9 +459,11 @@ def run_bazel_command(env, bazel_cmd, tries_so_far=0):
     except subprocess.CalledProcessError as ex:
         if platform.system() == "Windows" and tries_so_far == 0:
             print(
-                "Build failed, retrying with --jobs=1 in case linking failed due to hitting concurrency limits..."
+                "Build failed, retrying with --jobs=4 in case linking failed due to hitting concurrency limits..."
             )
-            run_bazel_command(env, bazel_cmd + ["--jobs", "1"], tries_so_far=1)
+            run_bazel_command(
+                env, bazel_cmd + ["--jobs", "4", "--link_timeout_5min=False"], tries_so_far=1
+            )
             return
 
         print("ERROR: Bazel build failed:")
@@ -465,6 +475,7 @@ def run_bazel_command(env, bazel_cmd, tries_so_far=0):
             print(ex.output)
 
         raise ex
+    Globals.bazel_build_success = True
 
 
 def bazel_build_thread_func(env, log_dir: str, verbose: bool, ninja_generate: bool) -> None:
@@ -1126,6 +1137,12 @@ def generate(env: SCons.Environment.Environment) -> None:
         "--dynamic_mode=off",
     ]
 
+    # Timeout linking on windows at 5 minutes to retry with a lower concurrency.
+    if platform.system() == "Windows":
+        bazel_internal_flags += [
+            "--link_timeout_5min=True",
+        ]
+
     if not os.environ.get("USE_NATIVE_TOOLCHAIN"):
         bazel_internal_flags += [
             f"--platforms=//bazel/platforms:{distro_or_os}_{normalized_arch}",
@@ -1420,6 +1437,12 @@ def generate(env: SCons.Environment.Environment) -> None:
         if Globals.bazel_thread_terminal_output is not None:
             Globals.bazel_thread_terminal_output.seek(0)
             sys.stdout.write(Globals.bazel_thread_terminal_output.read())
+        if not Globals.bazel_build_success:
+            raise SCons.Errors.BuildError(
+                errstr=f"Bazel Build failed with {Globals.bazel_build_exitcode}!",
+                status=Globals.bazel_build_exitcode,
+                exitstatus=1,
+            )
 
     env.AddMethod(wait_for_bazel, "WaitForBazel")
 

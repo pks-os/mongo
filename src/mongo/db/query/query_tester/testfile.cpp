@@ -137,8 +137,15 @@ bool readAndInsertNextBatch(DBClientConnection* const conn,
     auto docBuilder = BSONArrayBuilder{};
     auto currentObjSize = 0;
     auto lineFromFile = std::string{};
-    for (readLine(fileToRead, lineFromFile); !fileToRead.eof();
-         readLine(fileToRead, lineFromFile)) {
+
+    // Protect from reading past the end of file. Only read one line at a time for each check here.
+    while (!fileToRead.eof()) {
+        readLine(fileToRead, lineFromFile);
+        // Protect from inserting a malformed empty string as a document. Treat an empty line as an
+        // indication to end document insertion.
+        if (lineFromFile.empty()) {
+            break;
+        }
         currentObjSize += lineFromFile.size();
         docBuilder.append(fromFuzzerJson(lineFromFile));
         if (currentObjSize > 100000) {
@@ -148,9 +155,17 @@ bool readAndInsertNextBatch(DBClientConnection* const conn,
             return true;
         }
     }
-    bob.append("documents", docBuilder.arr());
-    auto cmd = bob.done();
-    runCommandAssertOK(conn, cmd, dbName);
+    // Protect from if the last document put currentObjSize over the hardcoded size limit, causing a
+    // flush. This then leaves the BSOn array empty for this final insertion attempt, but inserting
+    // an empty array causes an error, so we try to avoid it.
+    if (currentObjSize > 0) {
+        bob.append("documents", docBuilder.arr());
+        auto cmd = bob.done();
+        runCommandAssertOK(conn, cmd, dbName);
+    } else {
+        std::cerr << "Found no further documents to insert, so skipping the insert call."
+                  << std::endl;
+    }
     return false;
 }
 
@@ -162,7 +177,8 @@ bool readAndLoadCollFile(DBClientConnection* const conn,
     verifyFileStreamGood(collFile, filePath, "Failed to open file");
     // Read in indexes.
     readAndBuildIndexes(conn, dbName, collName, collFile);
-    for (auto needMore = readAndInsertNextBatch(conn, dbName, collName, collFile); needMore;
+    for (auto needMore = readAndInsertNextBatch(conn, dbName, collName, collFile);
+         needMore && !collFile.eof();
          needMore = readAndInsertNextBatch(conn, dbName, collName, collFile)) {
         verifyFileStreamGood(collFile, filePath, "Failed to read batch");
     }
@@ -405,8 +421,10 @@ std::string QueryFile::serializeStateForDebug() const {
 
 bool QueryFile::textBasedCompare(const std::filesystem::path& expectedPath,
                                  const std::filesystem::path& actualPath,
-                                 const ErrorLogLevel errorLogLevel) {
-    if (const auto& diffOutput = gitDiff(expectedPath, actualPath); !diffOutput.empty()) {
+                                 const ErrorLogLevel errorLogLevel,
+                                 const DiffStyle diffStyle) {
+    if (const auto& diffOutput = gitDiff(expectedPath, actualPath, diffStyle);
+        !diffOutput.empty()) {
         // Write out the diff output.
         std::cout << diffOutput << std::endl;
 
@@ -432,7 +450,8 @@ bool QueryFile::textBasedCompare(const std::filesystem::path& expectedPath,
 
 bool QueryFile::writeAndValidate(const ModeOption mode,
                                  const WriteOutOptions writeOutOpts,
-                                 const ErrorLogLevel errorLogLevel) {
+                                 const ErrorLogLevel errorLogLevel,
+                                 const DiffStyle diffStyle) {
     // Set up the text-based diff environment.
     std::filesystem::create_directories(_actualPath.parent_path());
     auto actualStream = std::fstream{_actualPath, std::ios::out | std::ios::trunc};
@@ -445,7 +464,7 @@ bool QueryFile::writeAndValidate(const ModeOption mode,
     // One big comparison, all at once.
     if (mode == ModeOption::Compare ||
         (mode == ModeOption::Normalize && writeOutOpts == WriteOutOptions::kNone)) {
-        return textBasedCompare(_expectedPath, _actualPath, errorLogLevel);
+        return textBasedCompare(_expectedPath, _actualPath, errorLogLevel, diffStyle);
     } else {
         const bool includeResults = writeOutOpts == WriteOutOptions::kResult ||
             writeOutOpts == WriteOutOptions::kOnelineResult;
