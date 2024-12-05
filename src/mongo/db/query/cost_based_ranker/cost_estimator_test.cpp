@@ -27,4 +27,22 @@
  *    it in the license file.
  */
 
-#include "mongo/db/process_health/fault_manager_test_suite.h"
+#include "mongo/db/query/cost_based_ranker/cost_estimator.h"
+
+#include "mongo/db/query/cost_based_ranker/estimates.h"
+#include "mongo/unittest/assert.h"
+#include "mongo/unittest/framework.h"
+
+namespace mongo::cost_based_ranker {
+namespace {
+
+// Cost(CollScan without predicate) < Cost(CollScan with predicate)
+TEST(CostEstimator, CollScanWithoutVsWithPredicate) {
+    // QSNEstimate qsnEst{}
+    ASSERT(true);
+}
+
+// Cost(CollScan with simple predicate) < Cost(CollScan with complex predicate)
+
+}  // unnamed namespace
+}  // namespace mongo::cost_based_ranker

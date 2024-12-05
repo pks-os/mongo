@@ -467,3 +467,67 @@ mongo_cc_library(
         "//src/mongo/util/net:network",
     ],
 )
+
+mongo_cc_library(
+    name = "async_timer_mock",
+    srcs = [
+        "async_timer_mock.cpp",
+    ],
+    hdrs = [
+        "async_timer_interface.h",
+        "async_timer_mock.h",
+    ],
+    deps = [
+        "//src/mongo:base",
+        "//src/mongo/base:system_error",
+    ],
+)
+
+mongo_cc_library(
+    name = "network_test_env",
+    srcs = [
+        "network_test_env.cpp",
+    ],
+    hdrs = [
+        "network_test_env.h",
+    ],
+    deps = [
+        ":network_interface_mock",
+        ":task_executor_interface",
+        "//src/mongo/db:commands",
+        "//src/mongo/db/query:command_request_response",
+        "//src/mongo/unittest",
+    ],
+)
+
+mongo_cc_library(
+    name = "task_executor_test_fixture",
+    srcs = [
+        "task_executor_test_common.cpp",
+        "task_executor_test_fixture.cpp",
+    ],
+    hdrs = [
+        "task_executor_test_common.h",
+        "task_executor_test_fixture.h",
+    ],
+    deps = [
+        ":network_interface_mock",
+        ":task_executor_interface",
+        "//src/mongo/unittest",
+        "//src/mongo/util:clock_source_mock",
+    ],
+)
+
+mongo_cc_library(
+    name = "thread_pool_task_executor_test_fixture",
+    srcs = [
+        "thread_pool_task_executor_test_fixture.cpp",
+    ],
+    hdrs = [
+        "thread_pool_task_executor_test_fixture.h",
+    ],
+    deps = [
+        ":task_executor_test_fixture",
+        ":thread_pool_task_executor",
+    ],
+)

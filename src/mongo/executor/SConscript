@@ -5,30 +5,6 @@ Import("env")
 env = env.Clone()
 
 env.Library(
-    target="async_timer_mock",
-    source=[
-        "async_timer_mock.cpp",
-    ],
-    LIBDEPS=[
-        "$BUILD_DIR/mongo/base",
-        "$BUILD_DIR/mongo/base/system_error",
-    ],
-)
-
-env.Library(
-    target="network_test_env",
-    source=[
-        "network_test_env.cpp",
-    ],
-    LIBDEPS=[
-        "$BUILD_DIR/mongo/db/commands",
-        "$BUILD_DIR/mongo/db/query/command_request_response",
-        "network_interface_mock",
-        "task_executor_interface",
-    ],
-)
-
-env.Library(
     target="network_interface_fixture",
     source=[
         "network_interface_integration_fixture.cpp",
@@ -41,31 +17,6 @@ env.Library(
         "$BUILD_DIR/mongo/unittest/integration_test_main",
         "$BUILD_DIR/mongo/util/concurrency/thread_pool",
         "$BUILD_DIR/mongo/util/version_impl",
-    ],
-)
-
-env.Library(
-    target="task_executor_test_fixture",
-    source=[
-        "task_executor_test_common.cpp",
-        "task_executor_test_fixture.cpp",
-    ],
-    LIBDEPS=[
-        "$BUILD_DIR/mongo/unittest/unittest",
-        "$BUILD_DIR/mongo/util/clock_source_mock",
-        "network_interface_mock",
-        "task_executor_interface",
-    ],
-)
-
-env.Library(
-    target="thread_pool_task_executor_test_fixture",
-    source=[
-        "thread_pool_task_executor_test_fixture.cpp",
-    ],
-    LIBDEPS=[
-        "task_executor_test_fixture",
-        "thread_pool_task_executor",
     ],
 )
 

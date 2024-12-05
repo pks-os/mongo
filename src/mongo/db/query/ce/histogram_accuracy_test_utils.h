@@ -71,6 +71,9 @@ struct ErrorCalculationSummary {
     double qError90thPercentile;
     double qError95thPercentile;
     double qError99thPercentile;
+
+    // total executed queries.
+    size_t executedQueries = 0;
 };
 
 stats::ScalarHistogram createHistogram(const std::vector<BucketData>& data);
@@ -79,7 +82,6 @@ stats::ScalarHistogram createHistogram(const std::vector<BucketData>& data);
  * Calculate the frequency of a specific SBEValue as found in a vector of SBEValues.
  */
 size_t calculateFrequencyFromDataVectorEq(const std::vector<stats::SBEValue>& data,
-                                          sbe::value::TypeTags type,
                                           stats::SBEValue valueToCalculate,
                                           bool includeScalar);
 
@@ -94,7 +96,6 @@ size_t calculateTypeFrequencyFromDataVectorEq(const std::vector<stats::SBEValue>
  * The range is always inclusive of the bounds.
  */
 static size_t calculateFrequencyFromDataVectorRange(const std::vector<stats::SBEValue>& data,
-                                                    sbe::value::TypeTags type,
                                                     stats::SBEValue valueToCalculateLow,
                                                     stats::SBEValue valueToCalculateHigh);
 
@@ -146,6 +147,7 @@ ErrorCalculationSummary runQueries(size_t size,
                                    const std::vector<stats::SBEValue>& data,
                                    std::shared_ptr<const stats::CEHistogram> ceHist,
                                    bool includeScalar,
+                                   ArrayRangeEstimationAlgo arrayRangeEstimationAlgo,
                                    bool useE2EAPI,
                                    size_t seed);
 
@@ -162,6 +164,7 @@ void runAccuracyTestConfiguration(DataDistributionEnum dataDistribution,
                                   int numberOfQueries,
                                   QueryType queryType,
                                   bool includeScalar,
+                                  ArrayRangeEstimationAlgo arrayRangeEstimationAlgo,
                                   bool useE2EAPI,
                                   size_t seed,
                                   bool printResults,

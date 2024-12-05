@@ -70,6 +70,7 @@ CardinalityEstimate CardinalityEstimator::estimate(const QuerySolutionNode* node
             break;
         case STAGE_SORT_DEFAULT:
         case STAGE_SORT_SIMPLE:
+            tassert(9768401, "Sort nodes are not expected to have filters.", !node->filter);
             ce = _inputCard;
             isConjunctionBreaker = true;
             break;
@@ -293,7 +294,8 @@ CardinalityEstimate CardinalityEstimator::estimate(const ComparisonMatchExpressi
                 str::stream{} << "encountered interval which is unestimatable: "
                               << interval.toString(true),
                 ce::HistogramEstimator::canEstimateInterval(*histogram, interval, true));
-        return ce::HistogramEstimator::estimateCardinality(*histogram, _inputCard, interval, true);
+        return ce::HistogramEstimator::estimateCardinality(
+            *histogram, _inputCard, interval, true, ce::ArrayRangeEstimationAlgo::kExactArrayCE);
     }
 
     SelectivityEstimate sel = estimateLeafMatchExpression(node, _inputCard);
@@ -377,7 +379,11 @@ CardinalityEstimate CardinalityEstimator::estimate(const OrderedIntervalList* no
                         ce::HistogramEstimator::canEstimateInterval(*histogram, interval, true);
                     if (canEstimate) {
                         return ce::HistogramEstimator::estimateCardinality(
-                                   *histogram, _inputCard, interval, true) /
+                                   *histogram,
+                                   _inputCard,
+                                   interval,
+                                   true,
+                                   ce::ArrayRangeEstimationAlgo::kExactArrayCE) /
                             _inputCard;
                     }
                 }
