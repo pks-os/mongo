@@ -1257,6 +1257,7 @@ mongo_cc_library(
         "oplog_applier.h",
         "oplog_applier_batcher.h",
         "oplog_batch.h",
+        "oplog_buffer.h",
     ],
     deps = [
         ":oplog_entry",
@@ -1337,6 +1338,7 @@ mongo_cc_library(
         "oplog_applier.h",
         "oplog_applier_batcher.h",
         "oplog_batch.h",
+        "oplog_buffer.h",
         "oplog_fetcher.h",
     ],
     deps = [
@@ -1429,6 +1431,7 @@ mongo_cc_library(
     srcs = [
         "replication_info.cpp",
     ],
+    no_undefined_ref_DO_NOT_USE = False,
     deps = [
         ":hello_auth",
         ":hello_command",
@@ -1879,6 +1882,48 @@ mongo_cc_library(
         "//src/mongo/db:service_context",
         "//src/mongo/db/concurrency:lock_manager",
         "//src/mongo/executor:network_interface_mock",
+    ],
+)
+
+mongo_cc_library(
+    name = "oplog_interface_mock",
+    srcs = [
+        "oplog_interface_mock.cpp",
+        "oplog_interface_mock.h",
+        "//src/mongo/db/repl:oplog_interface.h",
+        "//src/mongo/db/transaction:transaction_history_iterator.h",
+    ],
+    deps = [
+        ":oplog_entry",
+        "//src/mongo:base",
+        "//src/mongo/util/net:network",
+    ],
+)
+
+mongo_cc_library(
+    name = "dbcheck_test_fixture",
+    srcs = [
+        "dbcheck_test_fixture.cpp",
+    ],
+    hdrs = [
+        "dbcheck_test_fixture.h",
+        "//src/mongo/db/op_observer:operation_logger_mock.h",
+    ],
+    deps = [
+        ":dbcheck",
+        ":storage_interface",
+        "//src/mongo:base",
+        "//src/mongo/db:dbdirectclient",
+        "//src/mongo/db:service_context_d_test_fixture",
+        "//src/mongo/db/catalog:catalog_test_fixture",
+        "//src/mongo/db/catalog:health_log",
+        "//src/mongo/db/catalog:health_log_interface",
+        "//src/mongo/db/collection_crud",
+        "//src/mongo/db/commands:dbcheck_command",
+        "//src/mongo/db/index_builds:index_builds_coordinator",
+        "//src/mongo/db/op_observer",
+        "//src/mongo/db/op_observer:op_observer_impl",
+        "//src/mongo/unittest",
     ],
 )
 

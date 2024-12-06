@@ -31,6 +31,7 @@
 
 #include "mongo/bson/bsonobj.h"
 #include "mongo/db/matcher/expression.h"
+#include "mongo/db/query/cost_based_ranker/cardinality_estimator.h"
 #include "mongo/db/query/cost_based_ranker/estimates.h"
 #include "mongo/db/query/index_bounds.h"
 #include "mongo/db/query/query_solution.h"
@@ -58,6 +59,9 @@ std::unique_ptr<QuerySolution> makeIndexScanFetchPlan(
 
 std::unique_ptr<QuerySolution> makeCollScanPlan(std::unique_ptr<MatchExpression> filter);
 
+std::unique_ptr<QuerySolution> makeVirtualCollScanPlan(size_t size,
+                                                       std::unique_ptr<MatchExpression> filter);
+
 OrderedIntervalList makePointInterval(double point, std::string fieldName);
 
 IndexBounds makePointIntervalBounds(double point, std::string fieldName);
@@ -66,11 +70,16 @@ IndexBounds makeRangeIntervalBounds(const BSONObj& range,
                                     BoundInclusion boundInclusion,
                                     std::string fieldName);
 
-CardinalityEstimate getPlanCE(const QuerySolution& plan, double collCE);
+CEResult getPlanCE(const QuerySolution& plan,
+                   stats::CollectionStatisticsMock& stats,
+                   QueryPlanRankerModeEnum ceMode);
+
+CardinalityEstimate getPlanHeuristicCE(const QuerySolution& plan, double collCard);
 
 CardinalityEstimate getPlanHistogramCE(const QuerySolution& plan,
-                                       stats::CollectionStatisticsMock stats);
+                                       stats::CollectionStatisticsMock& stats);
 
-stats::CollectionStatisticsMock makeCollStatsWithHistograms();
+stats::CollectionStatisticsMock makeCollStatsWithHistograms(
+    const std::vector<std::string>& histFields, double collCard);
 
 }  // namespace mongo::cost_based_ranker

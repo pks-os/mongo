@@ -24,9 +24,9 @@ coll.drop();
 // Insert such data that some queries will do well with an {a: 1} index while
 // others with a {b: 1} index.
 assert.commandWorked(
-    coll.insertMany(Array.from({length: 100}, (_, i) => ({a: 1, b: i, c: i % 7}))));
+    coll.insertMany(Array.from({length: 1000}, (_, i) => ({a: 1, b: i, c: i % 7}))));
 assert.commandWorked(
-    coll.insertMany(Array.from({length: 100}, (_, i) => ({a: i, b: 1, c: i % 3}))));
+    coll.insertMany(Array.from({length: 1000}, (_, i) => ({a: i, b: 1, c: i % 3}))));
 
 coll.createIndexes([{a: 1}, {b: 1}, {c: 1, b: 1, a: 1}, {a: 1, b: 1}, {c: 1, a: 1}]);
 
@@ -147,6 +147,47 @@ try {
     checkLastRejectedPlan(q5);
     verifyCollectionCardinalityEstimate();
     verifyHeuristicEstimateSource();
+
+    /**
+     * Test strict and automatic CE modes.
+     */
+
+    // With strict mode Histogram CE without an applicable histogram should produce
+    // an error. Automatic mode should result in heuristicCE or mixedCE.
+
+    // TODO SERVER-97867: Since in automaticCE mode we always fallback to heuristic CE,
+    // it is not possible to ever fallback to multi-planning.
+
+    coll.drop();
+    assert.commandWorked(coll.insertOne({a: 1}));
+
+    assert.commandWorked(db.adminCommand({setParameter: 1, planRankerMode: "histogramCE"}));
+
+    // Request histogam CE while the collection has no histogram
+    assert.throwsWithCode(() => coll.find({a: 1}).explain(), ErrorCodes.HistogramCEFailure);
+
+    // Create a histogram on field "b".
+    // TODO SERVER-97814: Due to incompleteness of CBR 'analyze' must be run with multi-planning.
+    assert.commandWorked(db.adminCommand({setParameter: 1, planRankerMode: "multiPlanning"}));
+    assert.commandWorked(coll.runCommand({analyze: collName, key: "b"}));
+    assert.commandWorked(db.adminCommand({setParameter: 1, planRankerMode: "histogramCE"}));
+
+    // Request histogam CE on a field that doesn't have a histogram
+    assert.throwsWithCode(() => coll.find({a: 1}).explain(), ErrorCodes.HistogramCEFailure);
+    assert.throwsWithCode(() => coll.find({$and: [{b: 1}, {a: 3}]}).explain(),
+                          ErrorCodes.HistogramCEFailure);
+
+    // $or cannot fail because QueryPlanner::planSubqueries() falls back to choosePlanWholeQuery()
+    // when one of the subqueries could not be planned. In this way the CE error is masked.
+    const orExpl = coll.find({$or: [{b: 1}, {a: 3}]}).explain();
+    assert(isCollscan(db, getWinningPlanFromExplain(orExpl)));
+
+    // Histogram CE invokes conversion of expression to an inexact interval, which fails
+    assert.throwsWithCode(() => coll.find({b: {$gt: []}}).explain(), ErrorCodes.HistogramCEFailure);
+
+    // Histogram CE fails because of inestimable interval
+    assert.throwsWithCode(() => coll.find({b: {$gte: {foo: 1}}}).explain(),
+                          ErrorCodes.HistogramCEFailure);
 } finally {
     // Ensure that query knob doesn't leak into other testcases in the suite.
     assert.commandWorked(db.adminCommand({setParameter: 1, planRankerMode: "multiPlanning"}));

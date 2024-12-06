@@ -30,6 +30,7 @@
 #pragma once
 
 #include "mongo/db/matcher/expression.h"
+#include "mongo/db/query/ce/sampling_estimator.h"
 #include "mongo/db/query/cost_based_ranker/ce_utils.h"
 #include "mongo/db/query/cost_based_ranker/estimates.h"
 #include "mongo/db/query/cost_based_ranker/estimates_storage.h"
@@ -38,6 +39,8 @@
 #include "mongo/db/query/stats/collection_statistics.h"
 
 namespace mongo::cost_based_ranker {
+
+using CEResult = StatusWith<CardinalityEstimate>;
 
 template <typename T>
 concept IntersectionType = std::same_as<T, AndHashNode> || std::same_as<T, AndSortedNode>;
@@ -58,14 +61,9 @@ concept UnionType = std::same_as<T, OrNode> || std::same_as<T, MergeSortNode>;
 class CardinalityEstimator {
 public:
     CardinalityEstimator(const stats::CollectionStatistics& collStats,
+                         const ce::SamplingEstimator* samplingEstimator,
                          EstimateMap& qsnEstimates,
-                         QueryPlanRankerModeEnum rankerMode)
-        : _collCard{CardinalityEstimate{CardinalityType{collStats.getCardinality()},
-                                        EstimationSource::Metadata}},
-          _inputCard{_collCard},
-          _collStats(collStats),
-          _qsnEstimates{qsnEstimates},
-          _rankerMode(rankerMode) {}
+                         QueryPlanRankerModeEnum rankerMode);
 
     // Delete the copy and move constructors and assignment operator
     CardinalityEstimator(const CardinalityEstimator&) = delete;
@@ -73,44 +71,46 @@ public:
     CardinalityEstimator& operator=(const CardinalityEstimator&) = delete;
     CardinalityEstimator& operator=(CardinalityEstimator&&) = delete;
 
-    void estimatePlan(const QuerySolution& plan) {
+    CEResult estimatePlan(const QuerySolution& plan) {
         // Restore initial state so that the estimator can be reused for multiple plans.
         _inputCard = _collCard;
         _conjSels.clear();
 
-        estimate(plan.root());
+        return estimate(plan.root());
     }
 
 private:
     // QuerySolutionNodes
-    CardinalityEstimate estimate(const QuerySolutionNode* node);
-    CardinalityEstimate estimate(const CollectionScanNode* node);
-    CardinalityEstimate estimate(const VirtualScanNode* node);
-    CardinalityEstimate estimate(const IndexScanNode* node);
-    CardinalityEstimate estimate(const FetchNode* node);
-    CardinalityEstimate estimate(const AndHashNode* node);
-    CardinalityEstimate estimate(const AndSortedNode* node);
-    CardinalityEstimate estimate(const OrNode* node);
-    CardinalityEstimate estimate(const MergeSortNode* node);
+    CEResult estimate(const QuerySolutionNode* node);
+    CEResult estimate(const CollectionScanNode* node);
+    CEResult estimate(const VirtualScanNode* node);
+    CEResult estimate(const IndexScanNode* node);
+    CEResult estimate(const FetchNode* node);
+    CEResult estimate(const AndHashNode* node);
+    CEResult estimate(const AndSortedNode* node);
+    CEResult estimate(const OrNode* node);
+    CEResult estimate(const MergeSortNode* node);
 
     // MatchExpressions
-    CardinalityEstimate estimate(const MatchExpression* node, bool isFilterRoot);
-    CardinalityEstimate estimate(const ComparisonMatchExpression* node);
-    CardinalityEstimate estimate(const LeafMatchExpression* node);
-    CardinalityEstimate estimate(const AndMatchExpression* node);
-    CardinalityEstimate estimate(const OrMatchExpression* node);
+    CEResult estimate(const MatchExpression* node, bool isFilterRoot);
+    CEResult estimate(const ComparisonMatchExpression* node);
+    CEResult estimate(const LeafMatchExpression* node);
+    CEResult estimate(const AndMatchExpression* node);
+    CEResult estimate(const OrMatchExpression* node);
     // Intervals
-    CardinalityEstimate estimate(const IndexBounds* node);
-    CardinalityEstimate estimate(const OrderedIntervalList* node);
+    CEResult estimate(const IndexBounds* node);
+    CEResult estimate(const OrderedIntervalList* node);
 
     // Internal helper functions
-    CardinalityEstimate scanCard(const QuerySolutionNode* node, const CardinalityEstimate& card);
+    CEResult histogramCE(const ComparisonMatchExpression* node);
+
+    CEResult scanCard(const QuerySolutionNode* node, const CardinalityEstimate& card);
 
     template <IntersectionType T>
-    CardinalityEstimate indexIntersectionCard(const T* node);
+    CEResult indexIntersectionCard(const T* node);
 
     template <UnionType T>
-    CardinalityEstimate indexUnionCard(const T* node);
+    CEResult indexUnionCard(const T* node);
 
     CardinalityEstimate conjCard(size_t offset, CardinalityEstimate inputCard) {
         std::span selsToEstimate(std::span(_conjSels.begin() + offset, _conjSels.end()));
@@ -148,6 +148,11 @@ private:
 
     // Collection statistics contains cached histograms.
     const stats::CollectionStatistics& _collStats;
+
+    // Sampling estimator used to estimate cardinality using a cache of documents randomly sampled
+    // from the collection. We don't own this pointer and it may be null in the case that a sampling
+    // method which never uses sampling is requested.
+    const ce::SamplingEstimator* _samplingEstimator;
 
     // A map from QSN to QSNEstimate that stores the final CE result for each QSN node.
     // Not owned by this class - it is passed by the user of this class, and is filled in with
