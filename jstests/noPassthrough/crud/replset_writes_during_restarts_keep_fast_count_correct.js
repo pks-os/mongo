@@ -1,6 +1,7 @@
 /**
  * Test that a replica set can process CRUD operations while undergoing shutdowns. In particular,
  * whether the fast count can remain correct while processing these requests.
+ * @tags: [requires_persistence]
  */
 
 import {Thread} from "jstests/libs/parallelTester.js";

@@ -141,5 +141,40 @@ Value evaluate(const ExpressionSlice& expr, const Document& root, Variables* var
 Value evaluate(const ExpressionSize& expr, const Document& root, Variables* variables);
 Value evaluate(const ExpressionZip& expr, const Document& root, Variables* variables);
 
+Value evaluate(const ExpressionMap& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionReduce& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionFilter& expr, const Document& root, Variables* variables);
+
+Value evaluate(const ExpressionConcat& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionReplaceOne& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionReplaceAll& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionStrcasecmp& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionSubstrBytes& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionSubstrCP& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionStrLenBytes& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionBinarySize& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionStrLenCP& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionToLower& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionToUpper& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionTrim& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionSplit& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionIndexOfBytes& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionIndexOfCP& expr, const Document& root, Variables* variables);
+
+Value evaluate(const ExpressionAnd& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionAllElementsTrue& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionAnyElementTrue& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionCoerceToBool& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionCompare& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionCond& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionIfNull& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionIn& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionNot& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionOr& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionSwitch& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionBitAnd& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionBitOr& expr, const Document& root, Variables* variables);
+Value evaluate(const ExpressionBitXor& expr, const Document& root, Variables* variables);
+
 }  // namespace exec::expression
 }  // namespace mongo

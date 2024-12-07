@@ -26,40 +26,30 @@
 # it in the license file.
 #
 
+# Document source out stage IDL file
+
 global:
-    cpp_namespace: 'mongo'
+    cpp_namespace: "mongo"
 
 imports:
-    - "mongo/db/basic_types.idl"
+        - "mongo/db/basic_types.idl"
 
-commands:
-    shardsvrRunSearchIndexCommand:
-        command_name: _shardsvrRunSearchIndexCommand
-        cpp_name: ShardsvrRunSearchIndex
-        description: "Command request for search index management host"
-        namespace: ignored
-        api_version: ""
+structs:
+    DocumentSourceListClusterCatalogSpec:
+        description: "$listClusterCatalog pipeline spec"
         strict: true
-        reply_type: OkReply
+        query_shape_component: true
         fields:
-            resolvedNss:
-                description: "collection name value."
-                type: namespacestring
-                optional: false
-            userCmd:
-                description: "The original user search index command request."
-                type: object
-                optional: false
-            viewName:
-                description: >-
-                    If the command is being run on a view namespace, this field must be set to the 
-                    name of the view.
-                type: namespacestring
-                optional: true
-            mongotAlreadyInformed:
-                description: >-
-                    This string represents the host and port connection string running a mongot 
-                    that was originally issued the index command. When replicating this command 
-                    on other mongots, we don't want to repeat on this mongot.
-                type: string
-                optional: false
+            shards:
+                description: "If true, reports the list of shards that own the collection."
+                type: optionalBool
+                query_shape: literal
+            balancingConfiguration:
+                description: "If true, reports some balancing related configuration."
+                type: optionalBool
+                query_shape: literal
+            tracked:
+                description: "If true, reports whether the collection is tracked."
+                type: optionalBool
+                query_shape: literal
+

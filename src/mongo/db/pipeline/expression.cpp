@@ -43,15 +43,12 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <system_error>
 #include <tuple>
-#include <type_traits>
 #include <utility>
 #include <vector>
 // IWYU pragma: no_include <pstl/glue_algorithm_defs.h>
 // IWYU pragma: no_include "boost/container/detail/std_fwd.hpp"
 
-#include "mongo/base/data_range.h"
 #include "mongo/base/parse_number.h"
 #include "mongo/bson/bsonelement_comparator_interface.h"
 #include "mongo/bson/bsonmisc.h"
@@ -61,12 +58,10 @@
 #include "mongo/bson/oid.h"
 #include "mongo/bson/timestamp.h"
 #include "mongo/bson/util/builder.h"
-#include "mongo/bson/util/builder_fwd.h"
 #include "mongo/crypto/fle_crypto.h"
 #include "mongo/crypto/fle_field_schema_gen.h"
 #include "mongo/db/api_parameters.h"
 #include "mongo/db/basic_types.h"
-#include "mongo/db/curop_failpoint_helpers.h"
 #include "mongo/db/exec/document_value/document.h"
 #include "mongo/db/exec/document_value/value.h"
 #include "mongo/db/exec/expression/evaluate.h"
@@ -79,13 +74,8 @@
 #include "mongo/db/pipeline/variable_validation.h"
 #include "mongo/db/query/bson/dotted_path_support.h"
 #include "mongo/db/query/collation/collator_factory_interface.h"
-#include "mongo/db/query/collation/collator_interface.h"
-#include "mongo/db/query/datetime/date_time_support.h"
 #include "mongo/db/query/query_knobs_gen.h"
 #include "mongo/db/query/random_utils.h"
-#include "mongo/db/query/sort_pattern.h"
-#include "mongo/db/query/str_trim_utils.h"
-#include "mongo/db/query/substr_utils.h"
 #include "mongo/db/query/util/make_data_structure.h"
 #include "mongo/db/record_id.h"
 #include "mongo/db/stats/counters.h"
@@ -94,21 +84,14 @@
 #include "mongo/platform/decimal128.h"
 #include "mongo/platform/overflow_arithmetic.h"
 #include "mongo/platform/random.h"
-#include "mongo/stdx/unordered_map.h"
-#include "mongo/stdx/unordered_set.h"
 #include "mongo/util/assert_util.h"
-#include "mongo/util/base64.h"
-#include "mongo/util/decorable.h"
 #include "mongo/util/duration.h"
-#include "mongo/util/elapsed_tracker.h"
 #include "mongo/util/errno_util.h"
 #include "mongo/util/pcre.h"
 #include "mongo/util/pcre_util.h"
 #include "mongo/util/str.h"
 #include "mongo/util/string_map.h"
 #include "mongo/util/text.h"
-
-#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kQuery
 
 namespace mongo {
 using Parser = Expression::Parser;
@@ -118,8 +101,6 @@ using std::move;
 using std::pair;
 using std::string;
 using std::vector;
-
-MONGO_FAIL_POINT_DEFINE(mapReduceFilterPauseBeforeLoop);
 
 Value ExpressionConstant::serializeConstant(const SerializationOptions& opts,
                                             Value val,
@@ -141,33 +122,6 @@ Value ExpressionConstant::serializeConstant(const SerializationOptions& opts,
 
     return opts.serializeLiteral(val);
 }
-
-namespace {
-
-void mapReduceFilterWaitBeforeLoop(OperationContext* opCtx) {
-    CurOpFailpointHelpers::waitWhileFailPointEnabled(
-        &mapReduceFilterPauseBeforeLoop, opCtx, "mapReduceFilterPauseBeforeLoop", []() {
-            LOGV2(9006800, "waiting due to 'mapReduceFilterPauseBeforeLoop' failpoint");
-        });
-}
-
-std::function<void()> getExpressionInterruptChecker(OperationContext* opCtx) {
-    if (opCtx) {
-        ElapsedTracker et(opCtx->getServiceContext()->getFastClockSource(),
-                          internalQueryExpressionInterruptIterations.load(),
-                          Milliseconds{internalQueryExpressionInterruptPeriodMS.load()});
-        return [=]() mutable {
-            if (MONGO_unlikely(et.intervalHasElapsed())) {
-                opCtx->checkForInterrupt();
-            }
-        };
-    } else {
-        return []() {
-        };
-    }
-}
-
-}  // namespace
 
 /* --------------------------- Expression ------------------------------ */
 
@@ -675,18 +629,7 @@ const char* ExpressionAdd::getOpName() const {
 /* ------------------------- ExpressionAllElementsTrue -------------------------- */
 
 Value ExpressionAllElementsTrue::evaluate(const Document& root, Variables* variables) const {
-    const Value arr = _children[0]->evaluate(root, variables);
-    uassert(17040,
-            str::stream() << getOpName() << "'s argument must be an array, but is "
-                          << typeName(arr.getType()),
-            arr.isArray());
-    const vector<Value>& array = arr.getArray();
-    for (vector<Value>::const_iterator it = array.begin(); it != array.end(); ++it) {
-        if (!it->coerceToBool()) {
-            return Value(false);
-        }
-    }
-    return Value(true);
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 REGISTER_STABLE_EXPRESSION(allElementsTrue, ExpressionAllElementsTrue::parse);
@@ -753,14 +696,7 @@ intrusive_ptr<Expression> ExpressionAnd::optimize() {
 }
 
 Value ExpressionAnd::evaluate(const Document& root, Variables* variables) const {
-    const size_t n = _children.size();
-    for (size_t i = 0; i < n; ++i) {
-        Value pValue(_children[i]->evaluate(root, variables));
-        if (!pValue.coerceToBool())
-            return Value(false);
-    }
-
-    return Value(true);
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 REGISTER_STABLE_EXPRESSION(and, ExpressionAnd::parse);
@@ -771,18 +707,7 @@ const char* ExpressionAnd::getOpName() const {
 /* ------------------------- ExpressionAnyElementTrue -------------------------- */
 
 Value ExpressionAnyElementTrue::evaluate(const Document& root, Variables* variables) const {
-    const Value arr = _children[0]->evaluate(root, variables);
-    uassert(17041,
-            str::stream() << getOpName() << "'s argument must be an array, but is "
-                          << typeName(arr.getType()),
-            arr.isArray());
-    const vector<Value>& array = arr.getArray();
-    for (vector<Value>::const_iterator it = array.begin(); it != array.end(); ++it) {
-        if (it->coerceToBool()) {
-            return Value(true);
-        }
-    }
-    return Value(false);
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 REGISTER_STABLE_EXPRESSION(anyElementTrue, ExpressionAnyElementTrue::parse);
@@ -965,11 +890,7 @@ intrusive_ptr<Expression> ExpressionCoerceToBool::optimize() {
 }
 
 Value ExpressionCoerceToBool::evaluate(const Document& root, Variables* variables) const {
-    Value pResult(_children[_kExpression]->evaluate(root, variables));
-    bool b = pResult.coerceToBool();
-    if (b)
-        return Value(true);
-    return Value(false);
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 Value ExpressionCoerceToBool::serialize(const SerializationOptions& options) const {
@@ -1023,71 +944,33 @@ boost::intrusive_ptr<ExpressionCompare> ExpressionCompare::create(
 }
 
 namespace {
-// Lookup table for truth value returns
-struct CmpLookup {
-    const bool truthValue[3];                // truth value for -1, 0, 1
-    const ExpressionCompare::CmpOp reverse;  // reverse(b,a) returns the same as op(a,b)
-    const char name[5];                      // string name with trailing '\0'
+// Lookup table for returning opName
+struct CmpOpName {
+    const char name[5];  // string name with trailing '\0'
 };
-static const CmpLookup cmpLookup[7] = {
-    /*             -1      0      1      reverse                  name   */
-    /* EQ  */ {{false, true, false}, ExpressionCompare::EQ, "$eq"},
-    /* NE  */ {{true, false, true}, ExpressionCompare::NE, "$ne"},
-    /* GT  */ {{false, false, true}, ExpressionCompare::LT, "$gt"},
-    /* GTE */ {{false, true, true}, ExpressionCompare::LTE, "$gte"},
-    /* LT  */ {{true, false, false}, ExpressionCompare::GT, "$lt"},
-    /* LTE */ {{true, true, false}, ExpressionCompare::GTE, "$lte"},
-
-    // CMP is special. Only name is used.
-    /* CMP */ {{false, false, false}, ExpressionCompare::CMP, "$cmp"},
+static const CmpOpName cmpOpNames[7] = {
+    /* EQ  */ {"$eq"},
+    /* NE  */ {"$ne"},
+    /* GT  */ {"$gt"},
+    /* GTE */ {"$gte"},
+    /* LT  */ {"$lt"},
+    /* LTE */ {"$lte"},
+    /* CMP */ {"$cmp"},
 };
 }  // namespace
 
 Value ExpressionCompare::evaluate(const Document& root, Variables* variables) const {
-    Value pLeft(_children[0]->evaluate(root, variables));
-    Value pRight(_children[1]->evaluate(root, variables));
-
-    int cmp = getExpressionContext()->getValueComparator().compare(pLeft, pRight);
-
-    // Make cmp one of 1, 0, or -1.
-    if (cmp == 0) {
-        // leave as 0
-    } else if (cmp < 0) {
-        cmp = -1;
-    } else if (cmp > 0) {
-        cmp = 1;
-    }
-
-    if (cmpOp == CMP)
-        return Value(cmp);
-
-    bool returnValue = cmpLookup[cmpOp].truthValue[cmp + 1];
-    return Value(returnValue);
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 const char* ExpressionCompare::getOpName() const {
-    return cmpLookup[cmpOp].name;
+    return cmpOpNames[cmpOp].name;
 }
 
 /* ------------------------- ExpressionConcat ----------------------------- */
 
 Value ExpressionConcat::evaluate(const Document& root, Variables* variables) const {
-    const size_t n = _children.size();
-
-    StringBuilder result;
-    for (size_t i = 0; i < n; ++i) {
-        Value val = _children[i]->evaluate(root, variables);
-        if (val.nullish())
-            return Value(BSONNULL);
-
-        uassert(16702,
-                str::stream() << "$concat only supports strings, not " << typeName(val.getType()),
-                val.getType() == String);
-
-        result << val.coerceToString();
-    }
-
-    return Value(result.str());
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 REGISTER_STABLE_EXPRESSION(concat, ExpressionConcat::parse);
@@ -1109,9 +992,7 @@ const char* ExpressionConcatArrays::getOpName() const {
 /* ----------------------- ExpressionCond ------------------------------ */
 
 Value ExpressionCond::evaluate(const Document& root, Variables* variables) const {
-    Value pCond(_children[0]->evaluate(root, variables));
-    int idx = pCond.coerceToBool() ? 1 : 2;
-    return _children[idx]->evaluate(root, variables);
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 boost::intrusive_ptr<Expression> ExpressionCond::optimize() {
@@ -2391,68 +2272,7 @@ Value ExpressionFilter::serialize(const SerializationOptions& options) const {
 }
 
 Value ExpressionFilter::evaluate(const Document& root, Variables* variables) const {
-    // We are guaranteed at parse time that this isn't using our _varId.
-    Value inputVal = _children[_kInput]->evaluate(root, variables);
-
-    if (inputVal.nullish())
-        return Value(BSONNULL);
-
-    uassert(28651,
-            str::stream() << "input to $filter must be an array not "
-                          << typeName(inputVal.getType()),
-            inputVal.isArray());
-
-    const vector<Value>& input = inputVal.getArray();
-
-    if (input.empty())
-        return inputVal;
-
-    // This counter ensures we don't return more array elements than our limit arg has specified.
-    // For example, given the query, {$project: {b: {$filter: {input: '$a', as: 'x', cond: {$gt:
-    // ['$$x', 1]}, limit: {$literal: 3}}}}} remainingLimitCounter would be 3 and we would return up
-    // to the first 3 elements matching our condition, per doc.
-    auto approximateOutputSize = input.size();
-    boost::optional<int> remainingLimitCounter;
-    if (_limit) {
-        auto limitValue = (_children[*_limit])->evaluate(root, variables);
-        // If the $filter query contains limit: null, we interpret the query as being "limit-less"
-        // and therefore return all matching elements per doc.
-        if (!limitValue.nullish()) {
-            uassert(
-                327391,
-                str::stream() << "$filter: limit must be represented as a 32-bit integral value: "
-                              << limitValue.toString(),
-                limitValue.integral());
-            int coercedLimitValue = limitValue.coerceToInt();
-            uassert(327392,
-                    str::stream() << "$filter: limit must be greater than 0: "
-                                  << limitValue.toString(),
-                    coercedLimitValue > 0);
-            remainingLimitCounter = coercedLimitValue;
-            approximateOutputSize =
-                std::min(approximateOutputSize, static_cast<size_t>(coercedLimitValue));
-        }
-    }
-
-    auto checkForInterrupt =
-        getExpressionInterruptChecker(getExpressionContext()->getOperationContext());
-    mapReduceFilterWaitBeforeLoop(getExpressionContext()->getOperationContext());
-
-    vector<Value> output;
-    output.reserve(approximateOutputSize);
-    for (const auto& elem : input) {
-        checkForInterrupt();
-        variables->setValue(_varId, elem);
-
-        if (_children[_kCond]->evaluate(root, variables).coerceToBool()) {
-            output.push_back(elem);
-            if (remainingLimitCounter && --*remainingLimitCounter == 0) {
-                return Value(std::move(output));
-            }
-        }
-    }
-
-    return Value(std::move(output));
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 /* ------------------------- ExpressionFloor -------------------------- */
@@ -2566,45 +2386,7 @@ Value ExpressionMap::serialize(const SerializationOptions& options) const {
 }
 
 Value ExpressionMap::evaluate(const Document& root, Variables* variables) const {
-    // guaranteed at parse time that this isn't using our _varId
-    Value inputVal = _children[_kInput]->evaluate(root, variables);
-    if (inputVal.nullish())
-        return Value(BSONNULL);
-
-    uassert(16883,
-            str::stream() << "input to $map must be an array not " << typeName(inputVal.getType()),
-            inputVal.isArray());
-
-    const vector<Value>& input = inputVal.getArray();
-
-    if (input.empty())
-        return inputVal;
-
-    auto checkForInterrupt =
-        getExpressionInterruptChecker(getExpressionContext()->getOperationContext());
-    mapReduceFilterWaitBeforeLoop(getExpressionContext()->getOperationContext());
-
-    size_t memUsed = 0;
-    vector<Value> output;
-    output.reserve(input.size());
-    const size_t memLimit = internalQueryMaxMapFilterReduceBytes.load();
-    for (size_t i = 0; i < input.size(); i++) {
-        checkForInterrupt();
-        variables->setValue(_varId, input[i]);
-
-        Value toInsert = _children[_kEach]->evaluate(root, variables);
-        if (toInsert.missing())
-            toInsert = Value(BSONNULL);  // can't insert missing values into array
-
-        output.push_back(toInsert);
-        memUsed += toInsert.getApproximateSize();
-        if (MONGO_unlikely(memUsed > memLimit)) {
-            uasserted(ErrorCodes::ExceededMemoryLimit,
-                      "$map would use too much memory and cannot spill");
-        }
-    }
-
-    return Value(std::move(output));
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 /* ------------------------- ExpressionMeta ----------------------------- */
@@ -2971,13 +2753,7 @@ void ExpressionIfNull::validateArguments(const ExpressionVector& args) const {
 }
 
 Value ExpressionIfNull::evaluate(const Document& root, Variables* variables) const {
-    const size_t n = _children.size();
-    for (size_t i = 0; i < n; ++i) {
-        Value pValue(_children[i]->evaluate(root, variables));
-        if (!pValue.nullish() || i == n - 1)
-            return pValue;
-    }
-    return Value();
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 boost::intrusive_ptr<Expression> ExpressionIfNull::optimize() {
@@ -3032,19 +2808,7 @@ REGISTER_STABLE_EXPRESSION(ifNull, ExpressionIfNull::parse);
 /* ----------------------- ExpressionIn ---------------------------- */
 
 Value ExpressionIn::evaluate(const Document& root, Variables* variables) const {
-    Value argument(_children[0]->evaluate(root, variables));
-    Value arrayOfValues(_children[1]->evaluate(root, variables));
-
-    uassert(40081,
-            str::stream() << "$in requires an array as a second argument, found: "
-                          << typeName(arrayOfValues.getType()),
-            arrayOfValues.isArray());
-    for (auto&& value : arrayOfValues.getArray()) {
-        if (getExpressionContext()->getValueComparator().evaluate(argument == value)) {
-            return Value(true);
-        }
-    }
-    return Value(false);
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 REGISTER_STABLE_EXPRESSION(in, ExpressionIn::parse);
@@ -3053,24 +2817,6 @@ const char* ExpressionIn::getOpName() const {
 }
 
 /* ----------------------- ExpressionIndexOfArray ------------------ */
-
-namespace {
-
-void uassertIfNotIntegralAndNonNegative(Value val,
-                                        StringData expressionName,
-                                        StringData argumentName) {
-    uassert(40096,
-            str::stream() << expressionName << "requires an integral " << argumentName
-                          << ", found a value of type: " << typeName(val.getType())
-                          << ", with value: " << val.toString(),
-            val.integral());
-    uassert(40097,
-            str::stream() << expressionName << " requires a nonnegative " << argumentName
-                          << ", found: " << val.toString(),
-            val.coerceToInt() >= 0);
-}
-
-}  // namespace
 
 Value ExpressionIndexOfArray::evaluate(const Document& root, Variables* variables) const {
     return exec::expression::evaluate(*this, root, variables);
@@ -3107,62 +2853,8 @@ const char* ExpressionIndexOfArray::getOpName() const {
 
 /* ----------------------- ExpressionIndexOfBytes ------------------ */
 
-namespace {
-
-bool stringHasTokenAtIndex(size_t index, const std::string& input, const std::string& token) {
-    if (token.size() + index > input.size()) {
-        return false;
-    }
-    return input.compare(index, token.size(), token) == 0;
-}
-
-}  // namespace
-
 Value ExpressionIndexOfBytes::evaluate(const Document& root, Variables* variables) const {
-    Value stringArg = _children[0]->evaluate(root, variables);
-
-    if (stringArg.nullish()) {
-        return Value(BSONNULL);
-    }
-
-    uassert(40091,
-            str::stream() << "$indexOfBytes requires a string as the first argument, found: "
-                          << typeName(stringArg.getType()),
-            stringArg.getType() == String);
-    const std::string& input = stringArg.getString();
-
-    Value tokenArg = _children[1]->evaluate(root, variables);
-    uassert(40092,
-            str::stream() << "$indexOfBytes requires a string as the second argument, found: "
-                          << typeName(tokenArg.getType()),
-            tokenArg.getType() == String);
-    const std::string& token = tokenArg.getString();
-
-    size_t startIndex = 0;
-    if (_children.size() > 2) {
-        Value startIndexArg = _children[2]->evaluate(root, variables);
-        uassertIfNotIntegralAndNonNegative(startIndexArg, getOpName(), "starting index");
-        startIndex = static_cast<size_t>(startIndexArg.coerceToInt());
-    }
-
-    size_t endIndex = input.size();
-    if (_children.size() > 3) {
-        Value endIndexArg = _children[3]->evaluate(root, variables);
-        uassertIfNotIntegralAndNonNegative(endIndexArg, getOpName(), "ending index");
-        // Don't let 'endIndex' exceed the length of the string.
-        endIndex = std::min(input.size(), static_cast<size_t>(endIndexArg.coerceToInt()));
-    }
-
-    if (startIndex > input.length() || endIndex < startIndex) {
-        return Value(-1);
-    }
-
-    size_t position = input.substr(0, endIndex).find(token, startIndex);
-    if (position == std::string::npos) {
-        return Value(-1);
-    }
-
-    return Value(static_cast<int>(position));
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 REGISTER_STABLE_EXPRESSION(indexOfBytes, ExpressionIndexOfBytes::parse);
@@ -3173,84 +2865,7 @@ const char* ExpressionIndexOfBytes::getOpName() const {
 /* ----------------------- ExpressionIndexOfCP --------------------- */
 
 Value ExpressionIndexOfCP::evaluate(const Document& root, Variables* variables) const {
-    Value stringArg = _children[0]->evaluate(root, variables);
-
-    if (stringArg.nullish()) {
-        return Value(BSONNULL);
-    }
-
-    uassert(40093,
-            str::stream() << "$indexOfCP requires a string as the first argument, found: "
-                          << typeName(stringArg.getType()),
-            stringArg.getType() == String);
-    const std::string& input = stringArg.getString();
-
-    Value tokenArg = _children[1]->evaluate(root, variables);
-    uassert(40094,
-            str::stream() << "$indexOfCP requires a string as the second argument, found: "
-                          << typeName(tokenArg.getType()),
-            tokenArg.getType() == String);
-    const std::string& token = tokenArg.getString();
-
-    size_t startCodePointIndex = 0;
-    if (_children.size() > 2) {
-        Value startIndexArg = _children[2]->evaluate(root, variables);
-        uassertIfNotIntegralAndNonNegative(startIndexArg, getOpName(), "starting index");
-        startCodePointIndex = static_cast<size_t>(startIndexArg.coerceToInt());
-    }
-
-    // Compute the length (in code points) of the input, and convert 'startCodePointIndex' to a byte
-    // index.
-    size_t codePointLength = 0;
-    size_t startByteIndex = 0;
-    for (size_t byteIx = 0; byteIx < input.size(); ++codePointLength) {
-        if (codePointLength == startCodePointIndex) {
-            // We have determined the byte at which our search will start.
-            startByteIndex = byteIx;
-        }
-
-        uassert(40095,
-                "$indexOfCP found bad UTF-8 in the input",
-                !str::isUTF8ContinuationByte(input[byteIx]));
-        byteIx += str::getCodePointLength(input[byteIx]);
-    }
-
-    size_t endCodePointIndex = codePointLength;
-    if (_children.size() > 3) {
-        Value endIndexArg = _children[3]->evaluate(root, variables);
-        uassertIfNotIntegralAndNonNegative(endIndexArg, getOpName(), "ending index");
-
-        // Don't let 'endCodePointIndex' exceed the number of code points in the string.
-        endCodePointIndex =
-            std::min(codePointLength, static_cast<size_t>(endIndexArg.coerceToInt()));
-    }
-
-    // If the start index is past the end, then always return -1 since 'token' does not exist within
-    // these invalid bounds.
-    if (endCodePointIndex < startCodePointIndex) {
-        return Value(-1);
-    }
-
-    if (startByteIndex == 0 && input.empty() && token.empty()) {
-        // If we are finding the index of "" in the string "", the below loop will not loop, so we
-        // need a special case for this.
-        return Value(0);
-    }
-
-    // We must keep track of which byte, and which code point, we are examining, being careful not
-    // to overflow either the length of the string or the ending code point.
-
-    size_t currentCodePointIndex = startCodePointIndex;
-    for (size_t byteIx = startByteIndex; currentCodePointIndex < endCodePointIndex;
-         ++currentCodePointIndex) {
-        if (stringHasTokenAtIndex(byteIx, input, token)) {
-            return Value(static_cast<int>(currentCodePointIndex));
-        }
-
-        byteIx += str::getCodePointLength(input[byteIx]);
-    }
-
-    return Value(-1);
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 REGISTER_STABLE_EXPRESSION(indexOfCP, ExpressionIndexOfCP::parse);
@@ -3630,10 +3245,7 @@ Value ExpressionNary::serialize(const SerializationOptions& options) const {
 /* ------------------------- ExpressionNot ----------------------------- */
 
 Value ExpressionNot::evaluate(const Document& root, Variables* variables) const {
-    Value pOp(_children[0]->evaluate(root, variables));
-
-    bool b = pOp.coerceToBool();
-    return Value(!b);
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 REGISTER_STABLE_EXPRESSION(not, ExpressionNot::parse);
@@ -3644,14 +3256,7 @@ const char* ExpressionNot::getOpName() const {
 /* -------------------------- ExpressionOr ----------------------------- */
 
 Value ExpressionOr::evaluate(const Document& root, Variables* variables) const {
-    const size_t n = _children.size();
-    for (size_t i = 0; i < n; ++i) {
-        Value pValue(_children[i]->evaluate(root, variables));
-        if (pValue.coerceToBool())
-            return Value(true);
-    }
-
-    return Value(false);
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 intrusive_ptr<Expression> ExpressionOr::optimize() {
@@ -4050,38 +3655,7 @@ intrusive_ptr<Expression> ExpressionReduce::parse(ExpressionContext* const expCt
 }
 
 Value ExpressionReduce::evaluate(const Document& root, Variables* variables) const {
-    Value inputVal = _children[_kInput]->evaluate(root, variables);
-
-    if (inputVal.nullish()) {
-        return Value(BSONNULL);
-    }
-
-    uassert(40080,
-            str::stream() << "$reduce requires that 'input' be an array, found: "
-                          << inputVal.toString(),
-            inputVal.isArray());
-
-    auto checkForInterrupt =
-        getExpressionInterruptChecker(getExpressionContext()->getOperationContext());
-    mapReduceFilterWaitBeforeLoop(getExpressionContext()->getOperationContext());
-
-    size_t memLimit = internalQueryMaxMapFilterReduceBytes.load();
-    Value accumulatedValue = _children[_kInitial]->evaluate(root, variables);
-
-    for (auto&& elem : inputVal.getArray()) {
-        checkForInterrupt();
-
-        variables->setValue(_thisVar, elem);
-        variables->setValue(_valueVar, accumulatedValue);
-
-        accumulatedValue = _children[_kIn]->evaluate(root, variables);
-        if (MONGO_unlikely(accumulatedValue.getApproximateSize() > memLimit)) {
-            uasserted(ErrorCodes::ExceededMemoryLimit,
-                      "$reduce would use too much memory and cannot spill");
-        }
-    }
-
-    return accumulatedValue;
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 intrusive_ptr<Expression> ExpressionReduce::optimize() {
@@ -4146,36 +3720,6 @@ parseExpressionReplaceBase(const char* opName,
 }
 }  // namespace
 
-Value ExpressionReplaceBase::evaluate(const Document& root, Variables* variables) const {
-    Value input = _children[_kInput]->evaluate(root, variables);
-    Value find = _children[_kFind]->evaluate(root, variables);
-    Value replacement = _children[_kReplacement]->evaluate(root, variables);
-
-    // Throw an error if any arg is non-string, non-nullish.
-    uassert(51746,
-            str::stream() << getOpName()
-                          << " requires that 'input' be a string, found: " << input.toString(),
-            input.getType() == BSONType::String || input.nullish());
-    uassert(51745,
-            str::stream() << getOpName()
-                          << " requires that 'find' be a string, found: " << find.toString(),
-            find.getType() == BSONType::String || find.nullish());
-    uassert(51744,
-            str::stream() << getOpName() << " requires that 'replacement' be a string, found: "
-                          << replacement.toString(),
-            replacement.getType() == BSONType::String || replacement.nullish());
-
-    // Return null if any arg is nullish.
-    if (input.nullish())
-        return Value(BSONNULL);
-    if (find.nullish())
-        return Value(BSONNULL);
-    if (replacement.nullish())
-        return Value(BSONNULL);
-
-    return _doEval(input.getStringData(), find.getStringData(), replacement.getStringData());
-}
-
 intrusive_ptr<Expression> ExpressionReplaceBase::optimize() {
     _children[_kInput] = _children[_kInput]->optimize();
     _children[_kFind] = _children[_kFind]->optimize();
@@ -4195,23 +3739,8 @@ intrusive_ptr<Expression> ExpressionReplaceOne::parse(ExpressionContext* const e
         expCtx, std::move(input), std::move(find), std::move(replacement));
 }
 
-Value ExpressionReplaceOne::_doEval(StringData input,
-                                    StringData find,
-                                    StringData replacement) const {
-    size_t startIndex = input.find(find);
-    if (startIndex == std::string::npos) {
-        return Value(StringData(input));
-    }
-
-    // An empty string matches at every position, so replaceOne should insert the replacement text
-    // at position 0. input.find correctly returns position 0 when 'find' is empty, so we don't need
-    // any special case to handle this.
-    size_t endIndex = startIndex + find.size();
-    StringBuilder output;
-    output << input.substr(0, startIndex);
-    output << replacement;
-    output << input.substr(endIndex);
-    return Value(output.stringData());
+Value ExpressionReplaceOne::evaluate(const Document& root, Variables* variables) const {
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 /* ------------------------ ExpressionReplaceAll ------------------------ */
@@ -4226,37 +3755,8 @@ intrusive_ptr<Expression> ExpressionReplaceAll::parse(ExpressionContext* const e
         expCtx, std::move(input), std::move(find), std::move(replacement));
 }
 
-Value ExpressionReplaceAll::_doEval(StringData input,
-                                    StringData find,
-                                    StringData replacement) const {
-    // An empty string matches at every position, so replaceAll should insert 'replacement' at every
-    // position when 'find' is empty. Handling this as a special case lets us assume 'find' is
-    // nonempty in the usual case.
-    if (find.size() == 0) {
-        StringBuilder output;
-        for (char c : input) {
-            output << replacement << c;
-        }
-        output << replacement;
-        return Value(output.stringData());
-    }
-
-    StringBuilder output;
-    for (;;) {
-        size_t startIndex = input.find(find);
-        if (startIndex == std::string::npos) {
-            output << input;
-            break;
-        }
-
-        size_t endIndex = startIndex + find.size();
-        output << input.substr(0, startIndex);
-        output << replacement;
-        // This step assumes 'find' is nonempty. If 'find' were empty then input.find would always
-        // find a match at position 0, and the input would never shrink.
-        input = input.substr(endIndex);
-    }
-    return Value(output.stringData());
+Value ExpressionReplaceAll::evaluate(const Document& root, Variables* variables) const {
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 /* ------------------------ ExpressionReverseArray ------------------------ */
@@ -4567,46 +4067,7 @@ const char* ExpressionSize::getOpName() const {
 /* ----------------------- ExpressionSplit --------------------------- */
 
 Value ExpressionSplit::evaluate(const Document& root, Variables* variables) const {
-    Value inputArg = _children[0]->evaluate(root, variables);
-    Value separatorArg = _children[1]->evaluate(root, variables);
-
-    if (inputArg.nullish() || separatorArg.nullish()) {
-        return Value(BSONNULL);
-    }
-
-    uassert(40085,
-            str::stream() << "$split requires an expression that evaluates to a string as a first "
-                             "argument, found: "
-                          << typeName(inputArg.getType()),
-            inputArg.getType() == BSONType::String);
-    uassert(40086,
-            str::stream() << "$split requires an expression that evaluates to a string as a second "
-                             "argument, found: "
-                          << typeName(separatorArg.getType()),
-            separatorArg.getType() == BSONType::String);
-
-    StringData input = inputArg.getStringData();
-    StringData separator = separatorArg.getStringData();
-
-    uassert(40087, "$split requires a non-empty separator", !separator.empty());
-
-    std::vector<Value> output;
-
-    const char* needle = separator.rawData();
-    const char* const needleEnd = needle + separator.size();
-    const char* remainingHaystack = input.rawData();
-    const char* const haystackEnd = remainingHaystack + input.size();
-
-    const char* it = remainingHaystack;
-    while ((it = std::search(remainingHaystack, haystackEnd, needle, needleEnd)) != haystackEnd) {
-        StringData sd(remainingHaystack, it - remainingHaystack);
-        output.push_back(Value(sd));
-        remainingHaystack = it + separator.size();
-    }
-
-    StringData splitString(remainingHaystack, input.size() - (remainingHaystack - input.rawData()));
-    output.push_back(Value(splitString));
-    return Value(std::move(output));
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 REGISTER_STABLE_EXPRESSION(split, ExpressionSplit::parse);
@@ -4639,20 +4100,7 @@ const char* ExpressionSqrt::getOpName() const {
 /* ----------------------- ExpressionStrcasecmp ---------------------------- */
 
 Value ExpressionStrcasecmp::evaluate(const Document& root, Variables* variables) const {
-    Value pString1(_children[0]->evaluate(root, variables));
-    Value pString2(_children[1]->evaluate(root, variables));
-
-    /* boost::iequals returns a bool not an int so strings must actually be allocated */
-    string str1 = boost::to_upper_copy(pString1.coerceToString());
-    string str2 = boost::to_upper_copy(pString2.coerceToString());
-    int result = str1.compare(str2);
-
-    if (result == 0)
-        return Value(0);
-    else if (result > 0)
-        return Value(1);
-    else
-        return Value(-1);
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 REGISTER_STABLE_EXPRESSION(strcasecmp, ExpressionStrcasecmp::parse);
@@ -4663,54 +4111,7 @@ const char* ExpressionStrcasecmp::getOpName() const {
 /* ----------------------- ExpressionSubstrBytes ---------------------------- */
 
 Value ExpressionSubstrBytes::evaluate(const Document& root, Variables* variables) const {
-    Value pString(_children[0]->evaluate(root, variables));
-    Value pLower(_children[1]->evaluate(root, variables));
-    Value pLength(_children[2]->evaluate(root, variables));
-
-    string str = pString.coerceToString();
-    uassert(16034,
-            str::stream() << getOpName()
-                          << ":  starting index must be a numeric type (is BSON type "
-                          << typeName(pLower.getType()) << ")",
-            pLower.numeric());
-    uassert(16035,
-            str::stream() << getOpName() << ":  length must be a numeric type (is BSON type "
-                          << typeName(pLength.getType()) << ")",
-            pLength.numeric());
-
-    const long long signedLower = pLower.coerceToLong();
-
-    uassert(50752,
-            str::stream() << getOpName()
-                          << ":  starting index must be non-negative (got: " << signedLower << ")",
-            signedLower >= 0);
-
-    const string::size_type lower = static_cast<string::size_type>(signedLower);
-
-    // If the passed length is negative, we should return the rest of the string.
-    const long long signedLength = pLength.coerceToLong();
-    const string::size_type length =
-        signedLength < 0 ? str.length() : static_cast<string::size_type>(signedLength);
-
-    uassert(28656,
-            str::stream() << getOpName()
-                          << ":  Invalid range, starting index is a UTF-8 continuation byte.",
-            (lower >= str.length() || !str::isUTF8ContinuationByte(str[lower])));
-
-    // Check the byte after the last character we'd return. If it is a continuation byte, that
-    // means we're in the middle of a UTF-8 character.
-    uassert(
-        28657,
-        str::stream() << getOpName()
-                      << ":  Invalid range, ending index is in the middle of a UTF-8 character.",
-        (lower + length >= str.length() || !str::isUTF8ContinuationByte(str[lower + length])));
-
-    if (lower >= str.length()) {
-        // If lower > str.length() then string::substr() will throw out_of_range, so return an
-        // empty string if lower is not a valid string index.
-        return Value(StringData());
-    }
-    return Value(str.substr(lower, length));
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 // $substr is deprecated in favor of $substrBytes, but for now will just parse into a $substrBytes.
@@ -4723,42 +4124,7 @@ const char* ExpressionSubstrBytes::getOpName() const {
 /* ----------------------- ExpressionSubstrCP ---------------------------- */
 
 Value ExpressionSubstrCP::evaluate(const Document& root, Variables* variables) const {
-    Value inputVal(_children[0]->evaluate(root, variables));
-    Value lowerVal(_children[1]->evaluate(root, variables));
-    Value lengthVal(_children[2]->evaluate(root, variables));
-
-    std::string str = inputVal.coerceToString();
-    uassert(34450,
-            str::stream() << getOpName() << ": starting index must be a numeric type (is BSON type "
-                          << typeName(lowerVal.getType()) << ")",
-            lowerVal.numeric());
-    uassert(34451,
-            str::stream() << getOpName()
-                          << ": starting index cannot be represented as a 32-bit integral value: "
-                          << lowerVal.toString(),
-            lowerVal.integral());
-    uassert(34452,
-            str::stream() << getOpName() << ": length must be a numeric type (is BSON type "
-                          << typeName(lengthVal.getType()) << ")",
-            lengthVal.numeric());
-    uassert(34453,
-            str::stream() << getOpName()
-                          << ": length cannot be represented as a 32-bit integral value: "
-                          << lengthVal.toString(),
-            lengthVal.integral());
-
-    int startIndexCodePoints = lowerVal.coerceToInt();
-    int length = lengthVal.coerceToInt();
-
-    uassert(34454,
-            str::stream() << getOpName() << ": length must be a nonnegative integer.",
-            length >= 0);
-
-    uassert(34455,
-            str::stream() << getOpName() << ": the starting index must be nonnegative integer.",
-            startIndexCodePoints >= 0);
-
-    return Value(substr_utils::getSubstringCP(str, startIndexCodePoints, length));
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 REGISTER_STABLE_EXPRESSION(substrCP, ExpressionSubstrCP::parse);
@@ -4768,26 +4134,8 @@ const char* ExpressionSubstrCP::getOpName() const {
 
 /* ----------------------- ExpressionStrLenBytes ------------------------- */
 
-namespace {
-Value strLenBytes(StringData str) {
-    size_t strLen = str.size();
-
-    uassert(34470,
-            "string length could not be represented as an int.",
-            strLen <= std::numeric_limits<int>::max());
-    return Value(static_cast<int>(strLen));
-}
-}  // namespace
-
 Value ExpressionStrLenBytes::evaluate(const Document& root, Variables* variables) const {
-    Value str(_children[0]->evaluate(root, variables));
-
-    uassert(34473,
-            str::stream() << "$strLenBytes requires a string argument, found: "
-                          << typeName(str.getType()),
-            str.getType() == BSONType::String);
-
-    return strLenBytes(str.getStringData());
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 REGISTER_STABLE_EXPRESSION(strLenBytes, ExpressionStrLenBytes::parse);
@@ -4798,22 +4146,7 @@ const char* ExpressionStrLenBytes::getOpName() const {
 /* -------------------------- ExpressionBinarySize ------------------------------ */
 
 Value ExpressionBinarySize::evaluate(const Document& root, Variables* variables) const {
-    Value arg = _children[0]->evaluate(root, variables);
-    if (arg.nullish()) {
-        return Value(BSONNULL);
-    }
-
-    uassert(51276,
-            str::stream() << "$binarySize requires a string or BinData argument, found: "
-                          << typeName(arg.getType()),
-            arg.getType() == BSONType::BinData || arg.getType() == BSONType::String);
-
-    if (arg.getType() == BSONType::String) {
-        return strLenBytes(arg.getStringData());
-    }
-
-    BSONBinData binData = arg.getBinData();
-    return Value(binData.length);
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 REGISTER_STABLE_EXPRESSION(binarySize, ExpressionBinarySize::parse);
@@ -4825,21 +4158,7 @@ const char* ExpressionBinarySize::getOpName() const {
 /* ----------------------- ExpressionStrLenCP ------------------------- */
 
 Value ExpressionStrLenCP::evaluate(const Document& root, Variables* variables) const {
-    Value val(_children[0]->evaluate(root, variables));
-
-    uassert(34471,
-            str::stream() << "$strLenCP requires a string argument, found: "
-                          << typeName(val.getType()),
-            val.getType() == String);
-
-    std::string stringVal = val.getString();
-    size_t strLen = str::lengthInUTF8CodePoints(stringVal);
-
-    uassert(34472,
-            "string length could not be represented as an int.",
-            strLen <= std::numeric_limits<int>::max());
-
-    return Value(static_cast<int>(strLen));
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 REGISTER_STABLE_EXPRESSION(strLenCP, ExpressionStrLenCP::parse);
@@ -4947,20 +4266,7 @@ monotonic::State ExpressionSubtract::getMonotonicState(const FieldPath& sortedFi
 REGISTER_STABLE_EXPRESSION(switch, ExpressionSwitch::parse);
 
 Value ExpressionSwitch::evaluate(const Document& root, Variables* variables) const {
-    for (int i = 0; i < numBranches(); ++i) {
-        auto [caseExpr, thenExpr] = getBranch(i);
-        Value caseResult = caseExpr->evaluate(root, variables);
-
-        if (caseResult.coerceToBool()) {
-            return thenExpr->evaluate(root, variables);
-        }
-    }
-
-    uassert(40066,
-            "$switch could not find a matching branch for an input, and no default was specified.",
-            defaultExpr());
-
-    return defaultExpr()->evaluate(root, variables);
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 boost::intrusive_ptr<Expression> ExpressionSwitch::parse(ExpressionContext* const expCtx,
@@ -5108,10 +4414,7 @@ Value ExpressionSwitch::serialize(const SerializationOptions& options) const {
 /* ------------------------- ExpressionToLower ----------------------------- */
 
 Value ExpressionToLower::evaluate(const Document& root, Variables* variables) const {
-    Value pString(_children[0]->evaluate(root, variables));
-    string str = pString.coerceToString();
-    boost::to_lower(str);
-    return Value(str);
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 REGISTER_STABLE_EXPRESSION(toLower, ExpressionToLower::parse);
@@ -5122,10 +4425,7 @@ const char* ExpressionToLower::getOpName() const {
 /* ------------------------- ExpressionToUpper -------------------------- */
 
 Value ExpressionToUpper::evaluate(const Document& root, Variables* variables) const {
-    Value pString(_children[0]->evaluate(root, variables));
-    string str(pString.coerceToString());
-    boost::to_upper(str);
-    return Value(str);
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 REGISTER_STABLE_EXPRESSION(toUpper, ExpressionToUpper::parse);
@@ -5175,39 +4475,7 @@ intrusive_ptr<Expression> ExpressionTrim::parse(ExpressionContext* const expCtx,
 }
 
 Value ExpressionTrim::evaluate(const Document& root, Variables* variables) const {
-    auto unvalidatedInput = _children[_kInput]->evaluate(root, variables);
-    if (unvalidatedInput.nullish()) {
-        return Value(BSONNULL);
-    }
-    uassert(50699,
-            str::stream() << _name << " requires its input to be a string, got "
-                          << unvalidatedInput.toString() << " (of type "
-                          << typeName(unvalidatedInput.getType()) << ") instead.",
-            unvalidatedInput.getType() == BSONType::String);
-    const StringData input(unvalidatedInput.getStringData());
-
-    if (!_children[_kCharacters]) {
-        return Value(
-            str_trim_utils::doTrim(input,
-                                   str_trim_utils::kDefaultTrimWhitespaceChars,
-                                   _trimType == TrimType::kBoth || _trimType == TrimType::kLeft,
-                                   _trimType == TrimType::kBoth || _trimType == TrimType::kRight));
-    }
-    auto unvalidatedUserChars = _children[_kCharacters]->evaluate(root, variables);
-    if (unvalidatedUserChars.nullish()) {
-        return Value(BSONNULL);
-    }
-    uassert(50700,
-            str::stream() << _name << " requires 'chars' to be a string, got "
-                          << unvalidatedUserChars.toString() << " (of type "
-                          << typeName(unvalidatedUserChars.getType()) << ") instead.",
-            unvalidatedUserChars.getType() == BSONType::String);
-
-    return Value(str_trim_utils::doTrim(
-        input,
-        str_trim_utils::extractCodePointsFromChars(unvalidatedUserChars.getStringData()),
-        _trimType == TrimType::kBoth || _trimType == TrimType::kLeft,
-        _trimType == TrimType::kBoth || _trimType == TrimType::kRight));
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 boost::intrusive_ptr<Expression> ExpressionTrim::optimize() {
@@ -7684,6 +6952,18 @@ const char* ExpressionBitNot::getOpName() const {
 REGISTER_STABLE_EXPRESSION(bitAnd, ExpressionBitAnd::parse);
 REGISTER_STABLE_EXPRESSION(bitOr, ExpressionBitOr::parse);
 REGISTER_STABLE_EXPRESSION(bitXor, ExpressionBitXor::parse);
+
+Value ExpressionBitAnd::evaluate(const Document& root, Variables* variables) const {
+    return exec::expression::evaluate(*this, root, variables);
+}
+
+Value ExpressionBitOr::evaluate(const Document& root, Variables* variables) const {
+    return exec::expression::evaluate(*this, root, variables);
+}
+
+Value ExpressionBitXor::evaluate(const Document& root, Variables* variables) const {
+    return exec::expression::evaluate(*this, root, variables);
+}
 
 MONGO_INITIALIZER_GROUP(BeginExpressionRegistration, ("default"), ("EndExpressionRegistration"))
 MONGO_INITIALIZER_GROUP(EndExpressionRegistration, ("BeginExpressionRegistration"), ())

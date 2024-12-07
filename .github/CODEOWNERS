@@ -673,7 +673,7 @@ WORKSPACE.bazel @10gen/devprod-build @svc-auto-approve-bot
 /jstests/noPassthrough/traffic_recording/**/* @10gen/server-networking-and-observability @svc-auto-approve-bot
 
 # The following patterns are parsed from ./jstests/noPassthrough/ttl/OWNERS.yml
-/jstests/noPassthrough/ttl/**/* @10gen/server-storage-execution @svc-auto-approve-bot
+/jstests/noPassthrough/ttl/**/* @10gen/server-ttl @svc-auto-approve-bot
 
 # The following patterns are parsed from ./jstests/noPassthrough/txns_retryable_writes_sessions/OWNERS.yml
 /jstests/noPassthrough/txns_retryable_writes_sessions/**/* @10gen/server-cluster-scalability @svc-auto-approve-bot
@@ -738,7 +738,7 @@ WORKSPACE.bazel @10gen/devprod-build @svc-auto-approve-bot
 /jstests/noPassthroughWithMongod/timeseries/**/* @10gen/server-storage-execution @svc-auto-approve-bot
 
 # The following patterns are parsed from ./jstests/noPassthroughWithMongod/ttl/OWNERS.yml
-/jstests/noPassthroughWithMongod/ttl/**/* @10gen/server-storage-execution @svc-auto-approve-bot
+/jstests/noPassthroughWithMongod/ttl/**/* @10gen/server-ttl @svc-auto-approve-bot
 
 # The following patterns are parsed from ./jstests/noPassthroughWithMongod/validate/OWNERS.yml
 /jstests/noPassthroughWithMongod/validate/**/* @10gen/server-rss-sydney @10gen/server-storage-execution @svc-auto-approve-bot
@@ -857,7 +857,7 @@ WORKSPACE.bazel @10gen/devprod-build @svc-auto-approve-bot
 /src/mongo/bson/**/* @10gen/server-programmability @svc-auto-approve-bot
 
 # The following patterns are parsed from ./src/mongo/bson/column/OWNERS.yml
-/src/mongo/bson/column/**/* @10gen/server-storage-execution @svc-auto-approve-bot
+/src/mongo/bson/column/**/* @10gen/server-bsoncolumn @svc-auto-approve-bot
 
 # The following patterns are parsed from ./src/mongo/bson/mutable/OWNERS.yml
 /src/mongo/bson/mutable/**/* @10gen/query-execution @svc-auto-approve-bot
@@ -1272,6 +1272,7 @@ WORKSPACE.bazel @10gen/devprod-build @svc-auto-approve-bot
 /src/mongo/db/pipeline/**/document_source_coll_stats* @10gen/server-catalog-and-routing @svc-auto-approve-bot
 /src/mongo/db/pipeline/**/document_source_internal_all_collection_stats* @10gen/server-catalog-and-routing @svc-auto-approve-bot
 /src/mongo/db/pipeline/**/document_source_internal_list_collections* @10gen/server-catalog-and-routing @svc-auto-approve-bot
+/src/mongo/db/pipeline/**/document_source_list_cluster_catalog* @10gen/server-catalog-and-routing @svc-auto-approve-bot
 /src/mongo/db/pipeline/**/*list_catalog* @10gen/server-catalog-and-routing @svc-auto-approve-bot
 /src/mongo/db/pipeline/**/*sharded_data_distribution* @10gen/server-catalog-and-routing @svc-auto-approve-bot
 
@@ -1598,7 +1599,7 @@ WORKSPACE.bazel @10gen/devprod-build @svc-auto-approve-bot
 /src/mongo/db/s/resharding/**/coordinator_document.idl @10gen/server-catalog-and-routing @svc-auto-approve-bot
 
 # The following patterns are parsed from ./src/mongo/db/sorter/OWNERS.yml
-/src/mongo/db/sorter/**/* @10gen/server-storage-execution @svc-auto-approve-bot
+/src/mongo/db/sorter/**/* @10gen/server-external-sorter @svc-auto-approve-bot
 
 # The following patterns are parsed from ./src/mongo/db/stats/OWNERS.yml
 /src/mongo/db/stats/**/storage_stats* @10gen/server-catalog-and-routing @10gen/server-rss-sydney @10gen/server-storage-execution @svc-auto-approve-bot
@@ -1613,7 +1614,7 @@ WORKSPACE.bazel @10gen/devprod-build @svc-auto-approve-bot
 /src/mongo/db/storage/**/durable_catalog* @10gen/server-catalog-and-routing @10gen/server-rss-sydney @svc-auto-approve-bot
 
 # The following patterns are parsed from ./src/mongo/db/storage/key_string/OWNERS.yml
-/src/mongo/db/storage/key_string/**/* @10gen/server-storage-execution @svc-auto-approve-bot
+/src/mongo/db/storage/key_string/**/* @10gen/server-key-string @svc-auto-approve-bot
 
 # The following patterns are parsed from ./src/mongo/db/test_output/exec/OWNERS.yml
 /src/mongo/db/test_output/exec/**/* @10gen/query-execution @svc-auto-approve-bot
@@ -1633,11 +1634,14 @@ WORKSPACE.bazel @10gen/devprod-build @svc-auto-approve-bot
 # The following patterns are parsed from ./src/mongo/db/timeseries/OWNERS.yml
 /src/mongo/db/timeseries/**/* @10gen/server-storage-execution @svc-auto-approve-bot
 
+# The following patterns are parsed from ./src/mongo/db/timeseries/bucket_catalog/OWNERS.yml
+/src/mongo/db/timeseries/bucket_catalog/**/* @10gen/server-timeseries-bucket-catalog @svc-auto-approve-bot
+
 # The following patterns are parsed from ./src/mongo/db/transaction/OWNERS.yml
 /src/mongo/db/transaction/**/* @10gen/server-replication @svc-auto-approve-bot
 
 # The following patterns are parsed from ./src/mongo/db/ttl/OWNERS.yml
-/src/mongo/db/ttl/**/* @10gen/server-storage-execution @svc-auto-approve-bot
+/src/mongo/db/ttl/**/* @10gen/server-ttl @svc-auto-approve-bot
 
 # The following patterns are parsed from ./src/mongo/db/update/OWNERS.yml
 /src/mongo/db/update/**/* @10gen/query-execution-write-exec @svc-auto-approve-bot
@@ -1975,7 +1979,7 @@ WORKSPACE.bazel @10gen/devprod-build @svc-auto-approve-bot
 /src/mongo/util/tracing_profiler/**/* @10gen/query @svc-auto-approve-bot
 
 # The following patterns are parsed from ./src/mongo/util/tracking/OWNERS.yml
-/src/mongo/util/tracking/**/* @10gen/server-storage-execution @svc-auto-approve-bot
+/src/mongo/util/tracking/**/* @10gen/server-tracking-allocators @svc-auto-approve-bot
 
 # The following patterns are parsed from ./src/mongo/watchdog/OWNERS.yml
 /src/mongo/watchdog/**/* @10gen/server-networking-and-observability @svc-auto-approve-bot

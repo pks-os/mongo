@@ -217,7 +217,6 @@ mongo_cc_library(
         "//src/mongo/db/storage:storage_stats.h",
         "//src/mongo/db/storage:temporary_record_store.h",
         "//src/mongo/db/storage:write_unit_of_work.h",
-        "//src/mongo/db/storage/key_string:key_string.h",
         "//src/mongo/idl:command_generic_argument.h",
         "//src/mongo/idl:idl_parser.h",
         "//src/mongo/platform:atomic_proxy.h",
@@ -398,6 +397,31 @@ mongo_cc_library(
         ":query_sbe_stages",
         ":query_sbe_storage",
         "//src/mongo/db/query/optimizer:optimizer_base",
+    ],
+)
+
+mongo_cc_library(
+    name = "sbe_plan_stage_test",
+    srcs = [
+        "sbe_plan_stage_test.cpp",
+    ],
+    hdrs = [
+        "sbe_plan_stage_test.h",
+    ],
+    deps = [
+        ":query_sbe",
+        ":query_sbe_stages",
+        "//src/mongo/db:query_exec",
+        "//src/mongo/db:service_context_d_test_fixture",
+        "//src/mongo/db/auth:authmocks",
+        "//src/mongo/db/catalog:catalog_test_fixture",
+        "//src/mongo/db/query:query_test_service_context",
+        "//src/mongo/executor:network_interface_mock",
+        "//src/mongo/executor:task_executor_cursor",
+        "//src/mongo/executor:task_executor_interface",
+        "//src/mongo/executor:thread_pool_task_executor",
+        "//src/mongo/executor:thread_pool_task_executor_test_fixture",
+        "//src/mongo/unittest",
     ],
 )
 

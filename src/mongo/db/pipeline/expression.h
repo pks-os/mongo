@@ -43,7 +43,6 @@
 #include <functional>
 #include <initializer_list>
 #include <iterator>
-#include <limits>
 #include <map>
 #include <memory>
 #include <set>
@@ -51,10 +50,8 @@
 #include <utility>
 #include <vector>
 
-#include "mongo/base/data_range.h"
 #include "mongo/base/error_codes.h"
 #include "mongo/base/init.h"  // IWYU pragma: keep
-#include "mongo/base/initializer.h"
 #include "mongo/base/status.h"
 #include "mongo/base/status_with.h"
 #include "mongo/base/string_data.h"
@@ -63,8 +60,6 @@
 #include "mongo/bson/bsonobj.h"
 #include "mongo/bson/bsontypes.h"
 #include "mongo/crypto/fle_crypto_predicate.h"
-#include "mongo/crypto/fle_crypto_types.h"
-#include "mongo/db/commands/test_commands_enabled.h"
 #include "mongo/db/exec/document_value/document.h"
 #include "mongo/db/exec/document_value/document_metadata_fields.h"
 #include "mongo/db/exec/document_value/value.h"
@@ -79,20 +74,16 @@
 #include "mongo/db/pipeline/variables.h"
 #include "mongo/db/query/allowed_contexts.h"
 #include "mongo/db/query/datetime/date_time_support.h"
-#include "mongo/db/query/query_feature_flags_gen.h"
 #include "mongo/db/query/query_shape/serialization_options.h"
 #include "mongo/db/query/sort_pattern.h"
 #include "mongo/db/query/util/named_enum.h"
-#include "mongo/db/server_options.h"
 #include "mongo/db/update/pattern_cmp.h"
-#include "mongo/platform/basic.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/intrusive_counter.h"
 #include "mongo/util/pcre.h"
 #include "mongo/util/safe_num.h"
 #include "mongo/util/str.h"
 #include "mongo/util/string_map.h"
-#include "mongo/util/time_support.h"
 
 namespace mongo {
 
@@ -1214,6 +1205,10 @@ public:
         return visitor->visit(this);
     }
 
+    const Expression* getExpression() const {
+        return _children[_kExpression].get();
+    }
+
 private:
     ExpressionCoerceToBool(ExpressionContext* expCtx, boost::intrusive_ptr<Expression> pExpression);
 
@@ -2033,10 +2028,12 @@ public:
     const Expression* getInput() const {
         return _children[_kInput].get();
     }
+
     const Expression* getCond() const {
         return _children[_kCond].get();
     }
-    boost::optional<size_t> getLimit() const {
+
+    const boost::optional<size_t>& getLimit() const {
         return _limit;
     }
 
@@ -2409,6 +2406,18 @@ public:
         return visitor->visit(this);
     }
 
+    const Expression* getInput() const {
+        return _children[_kInput].get();
+    }
+
+    const Expression* getEach() const {
+        return _children[_kEach].get();
+    }
+
+    Variables::Id getVarId() const {
+        return _varId;
+    }
+
 private:
     static constexpr size_t _kInput = 0;
     static constexpr size_t _kEach = 1;
@@ -2760,6 +2769,26 @@ public:
         return visitor->visit(this);
     }
 
+    const Expression* getInput() const {
+        return _children[_kInput].get();
+    }
+
+    const Expression* getInitial() const {
+        return _children[_kInitial].get();
+    }
+
+    const Expression* getIn() const {
+        return _children[_kIn].get();
+    }
+
+    Variables::Id getThisVar() const {
+        return _thisVar;
+    }
+
+    Variables::Id getValueVar() const {
+        return _valueVar;
+    }
+
 private:
     static constexpr size_t _kInput = 0;
     static constexpr size_t _kInitial = 1;
@@ -2782,13 +2811,22 @@ public:
         : Expression(expCtx, {std::move(input), std::move(find), std::move(replacement)}) {}
 
     virtual const char* getOpName() const = 0;
-    Value evaluate(const Document& root, Variables* variables) const final;
     [[nodiscard]] boost::intrusive_ptr<Expression> optimize() final;
     Value serialize(const SerializationOptions& options = {}) const final;
 
-protected:
-    virtual Value _doEval(StringData input, StringData find, StringData replacement) const = 0;
+    const Expression* getInput() const {
+        return _children[_kInput].get();
+    }
 
+    const Expression* getFind() const {
+        return _children[_kFind].get();
+    }
+
+    const Expression* getReplacement() const {
+        return _children[_kReplacement].get();
+    }
+
+private:
     // These are owned by this->Expression::_children. They are references to intrusive_ptr instead
     // of direct references to Expression because we need to be able to replace each child in
     // optimize() without invalidating the references.
@@ -2819,8 +2857,7 @@ public:
         return visitor->visit(this);
     }
 
-protected:
-    Value _doEval(StringData input, StringData find, StringData replacement) const final;
+    Value evaluate(const Document& root, Variables* variables) const final;
 };
 
 class ExpressionReplaceAll final : public ExpressionReplaceBase {
@@ -2850,8 +2887,7 @@ public:
         return visitor->visit(this);
     }
 
-protected:
-    Value _doEval(StringData input, StringData find, StringData replacement) const final;
+    Value evaluate(const Document& root, Variables* variables) const final;
 };
 
 class ExpressionSecond final : public DateExpressionAcceptingTimeZone {
@@ -3569,6 +3605,22 @@ public:
 
     bool hasCharactersExpr() const {
         return _children[_kCharacters] != nullptr;
+    }
+
+    const Expression* getInput() const {
+        return _children[_kInput].get();
+    }
+
+    const Expression* getCharacters() const {
+        return _children[_kCharacters].get();
+    }
+
+    const std::string& getName() const {
+        return _name;
+    }
+
+    TrimType getTrimType() const {
+        return _trimType;
     }
 
 private:
@@ -4591,43 +4643,12 @@ public:
         return true;
     }
 
-    Value evaluate(const Document& root, Variables* variables) const final {
-        auto result = this->getIdentity();
-        for (auto&& child : this->_children) {
-            Value val = child->evaluate(root, variables);
-            if (val.nullish()) {
-                return Value(BSONNULL);
-            }
-            auto valNum = uassertStatusOK(safeNumFromValue(val));
-            result = doOperation(result, valNum);
-        }
-        return Value(result);
-    }
-
 private:
-    StatusWith<SafeNum> safeNumFromValue(const Value& val) const {
-        switch (val.getType()) {
-            case NumberInt:
-                return val.getInt();
-            case NumberLong:
-                return (int64_t)val.getLong();
-            default:
-                return Status(ErrorCodes::TypeMismatch,
-                              str::stream()
-                                  << this->getOpName() << " only supports int and long operands.");
-        }
-    }
-
-    virtual SafeNum doOperation(const SafeNum& a, const SafeNum& b) const = 0;
     virtual SafeNum getIdentity() const = 0;
 };
 
 class ExpressionBitAnd final : public ExpressionBitwise<ExpressionBitAnd> {
 public:
-    SafeNum doOperation(const SafeNum& a, const SafeNum& b) const final {
-        return a.bitAnd(b);
-    }
-
     SafeNum getIdentity() const final {
         return -1;  // In two's complement, this is all 1's.
     }
@@ -4635,6 +4656,8 @@ public:
     const char* getOpName() const final {
         return "$bitAnd";
     };
+
+    Value evaluate(const Document& root, Variables* variables) const final;
 
     explicit ExpressionBitAnd(ExpressionContext* const expCtx)
         : ExpressionBitwise<ExpressionBitAnd>(expCtx) {
@@ -4657,10 +4680,6 @@ public:
 
 class ExpressionBitOr final : public ExpressionBitwise<ExpressionBitOr> {
 public:
-    SafeNum doOperation(const SafeNum& a, const SafeNum& b) const final {
-        return a.bitOr(b);
-    }
-
     SafeNum getIdentity() const final {
         return 0;
     }
@@ -4668,6 +4687,8 @@ public:
     const char* getOpName() const final {
         return "$bitOr";
     };
+
+    Value evaluate(const Document& root, Variables* variables) const final;
 
     explicit ExpressionBitOr(ExpressionContext* const expCtx)
         : ExpressionBitwise<ExpressionBitOr>(expCtx) {
@@ -4689,10 +4710,6 @@ public:
 
 class ExpressionBitXor final : public ExpressionBitwise<ExpressionBitXor> {
 public:
-    SafeNum doOperation(const SafeNum& a, const SafeNum& b) const final {
-        return a.bitXor(b);
-    }
-
     SafeNum getIdentity() const final {
         return 0;
     }
@@ -4700,6 +4717,8 @@ public:
     const char* getOpName() const final {
         return "$bitXor";
     };
+
+    Value evaluate(const Document& root, Variables* variables) const final;
 
     explicit ExpressionBitXor(ExpressionContext* const expCtx)
         : ExpressionBitwise<ExpressionBitXor>(expCtx) {

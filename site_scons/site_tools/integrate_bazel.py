@@ -501,7 +501,11 @@ def bazel_build_thread_func(env, log_dir: str, verbose: bool, ninja_generate: bo
     elif SCons.Script.BUILD_TARGETS == ["compiledb"]:
         extra_args += ["--build_tag_filters=scons_link_lists,compiledb,gen_source"]
         bazel_cmd = Globals.bazel_base_build_command + extra_args + ["//:compiledb", "//src/..."]
-
+    elif SCons.Script.BUILD_TARGETS == ["compiledb", "+mongo-tidy-tests"]:
+        extra_args += [
+            "--build_tag_filters=scons_link_lists,compiledb,gen_source,mongo-tidy-tests,mongo-tidy-checks"
+        ]
+        bazel_cmd = Globals.bazel_base_build_command + extra_args + ["//:compiledb", "//src/..."]
     else:
         build_tags = env.GetOption("bazel-build-tag")
         if not build_tags:
@@ -1101,6 +1105,7 @@ def generate(env: SCons.Environment.Environment) -> None:
             distro_or_os = distro_id
 
     bazel_internal_flags = [
+        "--config=dbg",
         f"--compiler_type={env.ToolchainName()}",
         f'--opt={env.GetOption("opt")}',
         f'--dbg={env.GetOption("dbg") == "on"}',
@@ -1150,24 +1155,10 @@ def generate(env: SCons.Environment.Environment) -> None:
         ]
 
     if not os.environ.get("USE_NATIVE_TOOLCHAIN"):
-        if (
-            not is_local_execution(env)
-            and normalized_os == "linux"
-            and os.environ.get("evergreen_remote_exec") == "off"
-        ):
-            cache_silo = "_cache_silo"
-            bazel_internal_flags += [
-                f"--platforms=//bazel/platforms:{distro_or_os}_{normalized_arch}{cache_silo}",
-                f"--host_platform=//bazel/platforms:{distro_or_os}_{normalized_arch}{cache_silo}",
-                "--spawn_strategy=local",
-                "--jobs=auto",
-                "--remote_executor=",
-            ]
-        else:
-            bazel_internal_flags += [
-                f"--platforms=//bazel/platforms:{distro_or_os}_{normalized_arch}",
-                f"--host_platform=//bazel/platforms:{distro_or_os}_{normalized_arch}",
-            ]
+        bazel_internal_flags += [
+            f"--platforms=//bazel/platforms:{distro_or_os}_{normalized_arch}",
+            f"--host_platform=//bazel/platforms:{distro_or_os}_{normalized_arch}",
+        ]
 
     if "MONGO_ENTERPRISE_VERSION" in env:
         enterprise_features = env.GetOption("enterprise_features")
