@@ -3,9 +3,7 @@
 Import(
     [
         "env",
-        "get_option",
         "have_sasl_lib",
-        "has_option",
         "http_client",
         "version_extra",
         "version_parts",
@@ -22,10 +20,6 @@ env.InjectThirdParty(
         "s2",
     ]
 )
-
-
-def shouldBuildGRPC(myEnv):
-    return myEnv.TargetOSIs("linux") and myEnv["ENABLE_GRPC_BUILD"]
 
 
 env.SConscript(
@@ -157,17 +151,21 @@ env.CppUnitTest(
 asioEnv = env.Clone()
 asioEnv.InjectThirdParty("asio")
 
-env.Program(
+env.BazelProgram(
     target="mongotrafficreader",
-    source=[
-        "traffic_reader_main.cpp",
-    ],
-    LIBDEPS=[
-        "$BUILD_DIR/mongo/base",
-        "$BUILD_DIR/mongo/rpc/message",
-        "$BUILD_DIR/mongo/util/signal_handlers",
-        "concurrency/lock_manager",
-        "traffic_reader",
+    source=[],
+    LIBDEPS=[],
+    AIB_COMPONENT="mongotrafficreader",
+    AIB_COMPONENTS_EXTRA=[
+        "core",
+        "default",
+        "devcore",
+        "dist",
+        "dist-test",
+        "integration-tests",
+        "serverless",
+        "serverless-test",
+        "servers",
     ],
 )
 
@@ -266,34 +264,14 @@ if wiredtiger:
         LIBDEPS=[],
     )
 
-    envWithAsio.CppUnitTest(
-        target="vector_clock_test",
-        source=[
-            "keys_collection_document_test.cpp",
-            "logical_time_test.cpp",
-            "read_write_concern_defaults_test.cpp",
-            "time_proof_service_test.cpp",
-            "vector_clock_mongod_test.cpp",
-            "vector_clock_test.cpp",
-            "vector_clock_test_fixture.cpp",
-        ],
-        LIBDEPS=[
-            "$BUILD_DIR/mongo/util/clock_source_mock",
-            "keys_collection_client_direct",
-            "keys_collection_document",
-            "op_observer/op_observer",
-            "op_observer/op_observer_impl",
-            "op_observer/operation_logger_impl",
-            "read_write_concern_defaults_mock",
-            "s/shard_server_test_fixture",
-            "signed_logical_time",
-            "vector_clock",
-            "vector_clock_mutable",
-        ],
-    )
-
 env.CppUnitTest(
     target="shard_role_test",
+    source=[],
+    LIBDEPS=[],
+)
+
+env.CppUnitTest(
+    target="vector_clock_test",
     source=[],
     LIBDEPS=[],
 )

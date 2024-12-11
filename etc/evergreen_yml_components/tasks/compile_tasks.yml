@@ -761,7 +761,7 @@ tasks:
           targets: install-second-quarter-unittests install-second-quarter-unittests-debug
           compiling_for_test: true
           task_compile_flags: ${unittest_compile_flags}
-          bazel_build_tags: --bazel-build-tag=mongo_unittest_second_group --bazel-build-tag=mongo_library
+          bazel_build_tags: --bazel-build-tag=mongo_unittest_second_group --bazel-build-tag=mongo_library --bazel-build-tag=stitch_support_test
       - func: "f_expansions_write"
       - func: "run diskstats"
       - func: "f_expansions_write"
@@ -942,6 +942,7 @@ tasks:
           targets: archive-jstestshell
           compiling_for_test: true
           separate_debug: on
+          bazel_build_tags: --bazel-build-tag=jstestshell
           task_compile_flags: >-
             PREFIX=dist-test
             --link-model=static
@@ -999,7 +1000,7 @@ tasks:
       - func: "scons compile"
         vars:
           targets: install-stitch-support install-stitch-support-debug install-stitch-support-dev
-          bazel_build_tags: --bazel-build-tag=mongo_library
+          bazel_build_tags: --bazel-build-tag=stitch_support
           task_compile_flags: >-
             --link-model=dynamic-sdk
             --ssl=off
@@ -1042,7 +1043,7 @@ tasks:
       - func: "scons compile"
         vars:
           targets: install-stitch-support-test
-          bazel_build_tags: --bazel-build-tag=mongo_library
+          bazel_build_tags: --bazel-build-tag=stitch_support_test
           compiling_for_test: true
           task_compile_flags: >-
             --ssl=off
@@ -2285,6 +2286,12 @@ task_groups:
       - compile_and_run_unittests_second_quarter
       - compile_and_run_unittests_third_quarter
       - compile_and_run_unittests_fourth_quarter
+
+  - <<: *compile_task_group_template
+    name: compile_unittest_libaries_TG
+    max_hosts: -1
+    tasks:
+      - compile_libraries_for_unittests
 
   # These `parallel` task groups are only appropriate for builders that
   # use --link-model=dynamic, and have scons_cache_scope: shared and
