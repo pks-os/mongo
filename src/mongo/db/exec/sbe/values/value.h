@@ -981,13 +981,19 @@ public:
     void push_back(TypeTags tag, Value val) {
         if (tag != TypeTags::Nothing) {
             ValueGuard guard{tag, val};
+            MONGO_COMPILER_DIAGNOSTIC_PUSH
+            MONGO_COMPILER_DIAGNOSTIC_IGNORED_TRANSITIONAL("-Wstringop-overflow")
             _vals.push_back({tag, val});
+            MONGO_COMPILER_DIAGNOSTIC_POP
             guard.reset();
         }
     }
 
     void push_back(std::pair<TypeTags, Value> val) {
+        MONGO_COMPILER_DIAGNOSTIC_PUSH
+        MONGO_COMPILER_DIAGNOSTIC_IGNORED_TRANSITIONAL("-Wstringop-overflow")
         push_back(val.first, val.second);
+        MONGO_COMPILER_DIAGNOSTIC_POP
     }
 
     void pop_back() {
@@ -1511,6 +1517,7 @@ inline RecordId* getRecordIdView(Value val) noexcept {
 }
 
 std::pair<TypeTags, Value> makeNewRecordId(int64_t rid);
+std::pair<TypeTags, Value> makeNewRecordId(const char* str, int32_t size);
 std::pair<TypeTags, Value> makeCopyRecordId(const RecordId&);
 
 inline ValueBlock* getValueBlock(Value v) {

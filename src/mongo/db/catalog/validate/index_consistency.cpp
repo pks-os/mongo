@@ -95,6 +95,7 @@ namespace {
 
 MONGO_FAIL_POINT_DEFINE(crashOnMultikeyValidateFailure);
 MONGO_FAIL_POINT_DEFINE(failIndexKeyOrdering);
+MONGO_FAIL_POINT_DEFINE(failIndexTraversal);
 
 StringSet::hasher hash;
 
@@ -261,7 +262,7 @@ void KeyStringIndexConsistency::addIndexEntryErrors(OperationContext* opCtx,
         }
         StringBuilder ss;
         ss << "Index with name '" << indexName << "' has inconsistencies.";
-        results->getIndexResultsMap().at(indexName).addError(ss.str());
+        results->getIndexResultsMap().at(indexName).addError(ss.str(), false);
     }
 
     int numExtraIndexEntryErrors = 0;
@@ -281,7 +282,7 @@ void KeyStringIndexConsistency::addIndexEntryErrors(OperationContext* opCtx,
 
             StringBuilder ss;
             ss << "Index with name '" << indexName << "' has inconsistencies.";
-            results->getIndexResultsMap().at(indexName).addError(ss.str());
+            results->getIndexResultsMap().at(indexName).addError(ss.str(), false);
         }
     }
 
@@ -336,8 +337,8 @@ void KeyStringIndexConsistency::addDocKey(OperationContext* opCtx,
                   "hashUpper"_attr = hashUpper,
                   "hashLower"_attr = hashLower);
             const BSONObj& keyPatternBson = indexInfo->keyPattern;
-            auto keyStringBson =
-                key_string::toBsonSafe(ks.getView(), indexInfo->ord, ks.getTypeBits());
+            auto keyStringBson = key_string::toBsonSafe(
+                ks.getBuffer(), ks.getSize(), indexInfo->ord, ks.getTypeBits());
             key_string::logKeyString(
                 recordId, ks, keyPatternBson, keyStringBson, "[validate](record)");
         }
@@ -375,8 +376,8 @@ void KeyStringIndexConsistency::addIndexKey(OperationContext* opCtx,
                   "hashUpper"_attr = hashUpper,
                   "hashLower"_attr = hashLower);
             const BSONObj& keyPatternBson = indexInfo->keyPattern;
-            auto keyStringBson =
-                key_string::toBsonSafe(ks.getView(), indexInfo->ord, ks.getTypeBits());
+            auto keyStringBson = key_string::toBsonSafe(
+                ks.getBuffer(), ks.getSize(), indexInfo->ord, ks.getTypeBits());
             key_string::logKeyString(
                 recordId, ks, keyPatternBson, keyStringBson, "[validate](index)");
         }
@@ -564,29 +565,31 @@ void _validateKeyOrder(OperationContext* opCtx,
     // the format (Key, RID), and all RecordIDs are unique.
     if (currKey->keyString.compare(prevKey->keyString) <= 0 ||
         MONGO_unlikely(failIndexKeyOrdering.shouldFail())) {
-        if (results && results->isValid()) {
-            results->addError(str::stream()
-                              << "index '" << descriptor->indexName()
-                              << "' is not in strictly ascending or descending order");
+        if (results) {
+            results->addError(str::stream() << "index '" << descriptor->indexName()
+                                            << "' is not in strictly ascending or descending order",
+                              false);
         }
         return;
     }
 
     if (unique) {
         // Unique indexes must not have duplicate keys.
-        const int cmp =
-            currKey->keyString.compareWithoutRecordId(prevKey->keyString, currKey->loc.keyFormat());
+        const int cmp = currKey->loc.isLong()
+            ? currKey->keyString.compareWithoutRecordIdLong(prevKey->keyString)
+            : currKey->keyString.compareWithoutRecordIdStr(prevKey->keyString);
         if (cmp != 0) {
             return;
         }
 
-        if (results && results->isValid()) {
+        if (results) {
             const auto bsonKey =
                 key_string::toBson(currKey->keyString, Ordering::make(descriptor->keyPattern()));
             results->addError(str::stream() << "Unique index '" << descriptor->indexName()
                                             << "' has duplicate key: " << bsonKey
                                             << ", first record: " << prevKey->loc
-                                            << ", second record: " << currKey->loc);
+                                            << ", second record: " << currKey->loc,
+                              false);
         }
     }
 }
@@ -607,7 +610,7 @@ int64_t KeyStringIndexConsistency::traverseIndex(OperationContext* opCtx,
 
     key_string::Builder firstKeyStringBuilder(
         version, BSONObj(), indexInfo.ord, key_string::Discriminator::kExclusiveBefore);
-    std::span firstKeyString = firstKeyStringBuilder.finishAndGetBuffer();
+    StringData firstKeyString = firstKeyStringBuilder.finishAndGetBuffer();
     boost::optional<KeyStringEntry> prevIndexKeyStringEntry;
 
     // Ensure that this index has an open index cursor.
@@ -630,7 +633,12 @@ int64_t KeyStringIndexConsistency::traverseIndex(OperationContext* opCtx,
                         "index"_attr = indexName,
                         "key"_attr = firstKeyString.toString());
         }
-        throw;
+        indexResults.addError(fmt::format("Error seeking index cursor: Error {}, prevKey {}",
+                                          ex.toString(),
+                                          prevIndexKeyStringEntry
+                                              ? prevIndexKeyStringEntry->keyString.toString()
+                                              : "No previous key"));
+        return numKeys;
     }
 
     const auto keyFormat =
@@ -684,6 +692,10 @@ int64_t KeyStringIndexConsistency::traverseIndex(OperationContext* opCtx,
         }
 
         try {
+            if (MONGO_unlikely(failIndexTraversal.shouldFail())) {
+                throw ExceptionFor<ErrorCodes::TemporarilyUnavailable>(
+                    Status(ErrorCodes::TemporarilyUnavailable, "Mocked error"));
+            }
             indexEntry = indexCursor->nextKeyString(opCtx);
         } catch (const DBException& ex) {
             if (TestingProctor::instance().isEnabled() && ex.code() != ErrorCodes::WriteConflict &&
@@ -695,7 +707,18 @@ int64_t KeyStringIndexConsistency::traverseIndex(OperationContext* opCtx,
                             "index"_attr = indexName,
                             "prevKey"_attr = prevIndexKeyStringEntry->keyString.toString());
             }
-            throw;
+            // Write conflicts shouldn't be happening, so if they happen surface them through
+            // validation failing to complete. This is to avoid creating churn with an index
+            // validation failure that says "WriteConflict"
+            if (ex.code() != ErrorCodes::WriteConflict) {
+                indexResults.addError(
+                    fmt::format("Error advancing index cursor: Error {}, prevKey {}",
+                                ex.toString(),
+                                prevIndexKeyStringEntry->keyString.toString()));
+                return numKeys;
+            } else {
+                throw;
+            }
         }
     }
 
@@ -829,8 +852,10 @@ void KeyStringIndexConsistency::traverseRecord(OperationContext* opCtx,
               "recordId"_attr = recordId,
               "record"_attr = redact(recordBson));
         for (auto& key : *documentKeySet) {
-            auto indexKey = key_string::toBsonSafe(
-                key.getView(), iam->getSortedDataInterface()->getOrdering(), key.getTypeBits());
+            auto indexKey = key_string::toBsonSafe(key.getBuffer(),
+                                                   key.getSize(),
+                                                   iam->getSortedDataInterface()->getOrdering(),
+                                                   key.getTypeBits());
             const BSONObj rehydratedKey = _rehydrateKey(descriptor->keyPattern(), indexKey);
             LOGV2(7556101,
                   "Index key for document with multikey inconsistency",
@@ -941,7 +966,8 @@ void KeyStringIndexConsistency::_foundInconsistency(OperationContext* opCtx,
         recordId, results.getRecordTimestampsPtr());
     info.accessMethod->asSortedData()->getSortedDataInterface()->printIndexEntryMetadata(opCtx, ks);
 
-    const BSONObj& indexKey = key_string::toBsonSafe(ks.getView(), info.ord, ks.getTypeBits());
+    const BSONObj& indexKey =
+        key_string::toBsonSafe(ks.getBuffer(), ks.getSize(), info.ord, ks.getTypeBits());
     BSONObj rehydratedKey = _rehydrateKey(info.keyPattern, indexKey);
 
     BSONObjBuilder infoBuilder;

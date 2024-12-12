@@ -17,7 +17,7 @@ filters:
       - 10gen/server-security
   - "fsync*":
     approvers:
-      - 10gen/server-storage-execution
+      - 10gen/server-storage-engine-integration
   - "user_management_commands*":
     approvers:
       - 10gen/server-security
@@ -90,16 +90,16 @@ filters:
       - 10gen/server-catalog-and-routing
   - "set_index_commit_quorum*":
     approvers:
-      - 10gen/server-storage-execution
+      - 10gen/server-index-builds
   - "dbcommands*":
     approvers:
-      - 10gen/server-storage-execution
+      - 10gen/server-storage-engine-integration
   - "collection_to_capped*":
     approvers:
-      - 10gen/server-storage-execution
+      - 10gen/server-collection-write-path
   - "resize_oplog*":
     approvers:
-      - 10gen/server-storage-execution
+      - 10gen/server-storage-engine-integration
   - "apply_ops*":
     approvers:
       - 10gen/server-replication

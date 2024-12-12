@@ -175,14 +175,14 @@ std::string getBaseNameFromFilePath(const std::filesystem::path& filePath) {
     return filePath.stem().string();
 }
 
-std::vector<size_t> getFailedTestNums(const std::string& diffOutput) {
-    auto failedTestNums = std::vector<size_t>{};
+std::set<size_t> getFailedTestNums(const std::string& diffOutput) {
+    auto failedTestNums = std::set<size_t>{};
     auto line = std::string{};
     auto diffStream = std::istringstream{diffOutput};
 
     while (std::getline(diffStream, line)) {
         if (auto match = std::smatch{}; std::regex_search(line, match, kTestNumRegex)) {
-            failedTestNums.push_back(std::stoull(match[1]));
+            failedTestNums.insert(std::stoull(match[1]));
         }
     }
     return failedTestNums;
@@ -209,7 +209,7 @@ std::string gitDiff(const std::filesystem::path& expected,
          // The --no-index option allows us to compare files that are not in any repository. -U0
          // removes any lines of context around the diff so that the correct test number directly
          // preceding the diff will be captured.
-         << " --no-index " << (diffStyle == DiffStyle::kWord ? "--word-diff=color" : "--color")
+         << " --no-index " << (diffStyle == DiffStyle::kWord ? "--word-diff=color" : "--no-color")
          << " -U0 -- " << expected << " " << actual << " 2>&1")
             .str();
 
@@ -270,7 +270,7 @@ std::vector<std::string> readLine(std::fstream& fs, std::string& lineFromFile) {
 
 DiffStyle stringToDiffStyle(const std::string& style) {
     static const auto kStringToDiffStyleMap =
-        std::map<std::string, DiffStyle>{{"line", DiffStyle::kLine}, {"word", DiffStyle::kWord}};
+        std::map<std::string, DiffStyle>{{"plain", DiffStyle::kPlain}, {"word", DiffStyle::kWord}};
 
     if (auto it = kStringToDiffStyleMap.find(style); it != kStringToDiffStyleMap.end()) {
         return it->second;

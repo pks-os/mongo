@@ -1525,7 +1525,8 @@ public:
             });
 
             ASSERT_EQ(false, results.isValid());
-            ASSERT_EQ(static_cast<size_t>(2), totalErrors(results));
+            // Inconsistencies in 'a' and '_id', '_id' count mismatch
+            ASSERT_EQ(static_cast<size_t>(3), totalErrors(results));
             ASSERT_EQ(static_cast<size_t>(1), totalNonTransientWarnings(results));
             ASSERT_EQ(static_cast<size_t>(2), results.getExtraIndexEntries().size());
             ASSERT_EQ(static_cast<size_t>(0), results.getMissingIndexEntries().size());
@@ -1960,7 +1961,8 @@ public:
 
             ASSERT_EQ(false, results.isValid());
             ASSERT_EQ(false, results.getRepaired());
-            ASSERT_EQ(static_cast<size_t>(2), totalErrors(results));
+            // Inconsistencies in 'a' and '_id', '_id' count mismatch
+            ASSERT_EQ(static_cast<size_t>(3), totalErrors(results));
             ASSERT_EQ(static_cast<size_t>(1), totalNonTransientWarnings(results));
             ASSERT_EQ(static_cast<size_t>(2), results.getExtraIndexEntries().size());
             ASSERT_EQ(static_cast<size_t>(0), results.getMissingIndexEntries().size());
@@ -4221,7 +4223,7 @@ public:
         BSONObj obj(buffer);
 
         RecordStore* rs = coll()->getRecordStore();
-        RecordId rid({OID::gen().view().view(), OID::kOIDSize});
+        RecordId rid(OID::gen().view().view(), OID::kOIDSize);
         {
             beginTransaction();
             ASSERT_OK(rs->insertRecord(&_opCtx, rid, obj.objdata(), obj.objsize(), timestampToUse));

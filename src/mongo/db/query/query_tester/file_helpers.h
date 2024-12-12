@@ -51,7 +51,7 @@ static constexpr auto kFeatureExtractorDir = std::string_view{"/home/ubuntu/feat
 static constexpr auto kShellMaxLen = std::numeric_limits<size_t>::max();
 static constexpr auto kShellTimeout = Milliseconds{60 * 60 * 1000};  // 1 hour
 
-enum class DiffStyle { kLine, kWord };
+enum class DiffStyle { kPlain, kWord };
 enum class ErrorLogLevel { kSimple, kVerbose, kExtractFeatures };
 enum class WriteOutOptions { kNone, kResult, kOnelineResult };
 
@@ -145,9 +145,9 @@ void displayFailingQueryFeatures(const std::filesystem::path&);
 std::string getBaseNameFromFilePath(const std::filesystem::path&);
 /**
  * Extracts the test numbers associated with failing queries from hunk headers in the git diff
- * output and stores them in a vector.
+ * output and stores them in a set for deduplication.
  */
-std::vector<size_t> getFailedTestNums(const std::string& diffOutput);
+std::set<size_t> getFailedTestNums(const std::string& diffOutput);
 std::string getMongoRepoRoot();
 /**
  * Performs a text-based diff between the expected and actual result test files and returns the diff

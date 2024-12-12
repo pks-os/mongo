@@ -51,6 +51,7 @@
 #include "mongo/db/pipeline/document_source_union_with.h"
 #include "mongo/db/pipeline/document_source_unwind.h"
 #include "mongo/db/pipeline/expression_context.h"
+#include "mongo/db/pipeline/field_path.h"
 #include "mongo/db/pipeline/pipeline.h"
 #include "mongo/db/pipeline/search/document_source_search.h"
 #include "mongo/db/pipeline/search/document_source_vector_search.h"
@@ -85,17 +86,21 @@ static void rankFusionPipelineValidator(const Pipeline& pipeline) {
         DocumentSourceSearch::kStageName,
         DocumentSourceGeoNear::kStageName};
     auto sources = pipeline.getSources();
+
+    static const std::string rankPipelineMsg =
+        "All subpipelines to the $rankFusion stage must begin with one of $search, "
+        "$vectorSearch, $geoNear, $scoreFusion, $rankFusion or have a custom $sort in "
+        "the pipeline.";
+    uassert(9834300,
+            str::stream() << "$rankFusion input pipeline cannot be empty. " << rankPipelineMsg,
+            !sources.empty());
+
     auto firstStageName = sources.front()->getSourceName();
     auto isRankedPipeline = implicitlyOrderedStages.contains(firstStageName) ||
         std::any_of(sources.begin(), sources.end(), [](auto& stage) {
                                 return stage->getSourceName() == DocumentSourceSort::kStageName;
                             });
-    uassert(9191100,
-            str::stream()
-                << "All subpipelines to the $rankFusion stage must begin with one of $search, "
-                   "$vectorSearch, $geoNear, $scoreFusion, $rankFusion or have a custom $sort in "
-                   "the pipeline.",
-            isRankedPipeline);
+    uassert(9191100, rankPipelineMsg, isRankedPipeline);
 
     std::for_each(sources.begin(), sources.end(), [](auto& stage) {
         if (stage->getSourceName() == DocumentSourceGeoNear::kStageName) {
@@ -317,14 +322,13 @@ std::unique_ptr<DocumentSourceRankFusion::LiteParsed> DocumentSourceRankFusion::
             str::stream() << kStageName << " must take a nested object but found: " << spec,
             spec.type() == BSONType::Object);
 
-    std::vector<LiteParsedPipeline> liteParsedPipelines;
-
     auto parsedSpec = RankFusionSpec::parse(IDLParserContext(kStageName), spec.embeddedObject());
     auto inputPipesObj = parsedSpec.getInput().getPipelines();
 
     // Ensure that all pipelines are valid ranked selection pipelines.
+    std::vector<LiteParsedPipeline> liteParsedPipelines;
     for (const auto& elem : inputPipesObj) {
-        liteParsedPipelines.emplace_back(LiteParsedPipeline(nss, getPipeline(elem)));
+        liteParsedPipelines.emplace_back(nss, getPipeline(elem));
     }
 
     return std::make_unique<DocumentSourceRankFusion::LiteParsed>(
@@ -349,8 +353,10 @@ std::list<boost::intrusive_ptr<DocumentSource>> DocumentSourceRankFusion::create
     for (const auto& elem : spec.getInput().getPipelines()) {
         auto pipeline = Pipeline::parse(getPipeline(elem), pExpCtx);
         rankFusionPipelineValidator(*pipeline);
-        // TODO SERVER-96154 Validate field names.
-        inputPipelines[elem.fieldName()] = std::move(pipeline);
+
+        auto inputName = elem.fieldName();
+        FieldPath::uassertValidFieldName(inputName);
+        inputPipelines[inputName] = std::move(pipeline);
     }
 
     StringMap<double> weights = extractAndValidateWeights(spec, inputPipelines);

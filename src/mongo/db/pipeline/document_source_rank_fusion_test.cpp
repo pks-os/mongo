@@ -94,14 +94,14 @@ TEST_F(DocumentSourceRankFusionTest, ErrorsIfNoPipeline) {
     auto spec = fromjson(R"({
         $rankFusion: {
             input: {
-                pipelines: []
+                pipelines: {}
             }
         }
     })");
 
     ASSERT_THROWS_CODE(DocumentSourceRankFusion::createFromBson(spec.firstElement(), getExpCtx()),
                        AssertionException,
-                       ErrorCodes::TypeMismatch);
+                       ErrorCodes::BadValue);
 }
 
 TEST_F(DocumentSourceRankFusionTest, ErrorsIfMissingPipeline) {
@@ -274,6 +274,22 @@ TEST_F(DocumentSourceRankFusionTest, ErrorsIfNotRankedPipeline) {
     ASSERT_THROWS_CODE(DocumentSourceRankFusion::createFromBson(spec.firstElement(), getExpCtx()),
                        AssertionException,
                        9191100);
+}
+
+TEST_F(DocumentSourceRankFusionTest, ErrorsIfEmptyPipeline) {
+    auto spec = fromjson(R"({
+        $rankFusion: {
+            input: {
+                pipelines: {
+                    pipeOne: []
+                }
+            }
+        }
+    })");
+
+    ASSERT_THROWS_CODE(DocumentSourceRankFusion::createFromBson(spec.firstElement(), getExpCtx()),
+                       AssertionException,
+                       9834300);
 }
 
 TEST_F(DocumentSourceRankFusionTest, CheckMultiplePipelinesAndOptionalArgumentsAllowed) {
@@ -2317,6 +2333,96 @@ TEST_F(DocumentSourceRankFusionTest, CheckWeightsAppliedMultiplePipelines) {
             ]
         })",
         asOneObj);
+}
+
+TEST_F(DocumentSourceRankFusionTest, ErrorsIfPipelineNameEmpty) {
+    auto spec = fromjson(R"({
+        $rankFusion: {
+            input: {
+                pipelines: {
+                    "": [
+                        { $match : { author : "Agatha Christie" } },
+                        { $sort: {author: 1} }
+                    ],
+                    matchGenres: [
+                        {
+                            $search: {
+                                index: "search_index",
+                                text: {
+                                    query: "mystery",
+                                    path: "genres"
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    })");
+
+    ASSERT_THROWS_CODE(DocumentSourceRankFusion::createFromBson(spec.firstElement(), getExpCtx()),
+                       AssertionException,
+                       15998);
+}
+
+TEST_F(DocumentSourceRankFusionTest, ErrorsIfPipelineNameStartsWithDollar) {
+    auto spec = fromjson(R"({
+        $rankFusion: {
+            input: {
+                pipelines: {
+                    $matchAuthor: [
+                        { $match : { author : "Agatha Christie" } },
+                        { $sort: {author: 1} }
+                    ],
+                    matchGenres: [
+                        {
+                            $search: {
+                                index: "search_index",
+                                text: {
+                                    query: "mystery",
+                                    path: "genres"
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    })");
+
+    ASSERT_THROWS_CODE(DocumentSourceRankFusion::createFromBson(spec.firstElement(), getExpCtx()),
+                       AssertionException,
+                       16410);
+}
+
+TEST_F(DocumentSourceRankFusionTest, ErrorsIfPipelineNameContainsDot) {
+    auto spec = fromjson(R"({
+        $rankFusion: {
+            input: {
+                pipelines: {
+                    matchAuthor: [
+                        { $match : { author : "Agatha Christie" } },
+                        { $sort: {author: 1} }
+                    ],
+                    "match.genres": [
+                        {
+                            $search: {
+                                index: "search_index",
+                                text: {
+                                    query: "mystery",
+                                    path: "genres"
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    })");
+
+    ASSERT_THROWS_CODE(DocumentSourceRankFusion::createFromBson(spec.firstElement(), getExpCtx()),
+                       AssertionException,
+                       16412);
 }
 }  // namespace
 }  // namespace mongo
