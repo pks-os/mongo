@@ -456,6 +456,7 @@ def perform_tty_bazel_build(bazel_cmd: str) -> None:
     import pty
 
     parent_fd, child_fd = pty.openpty()  # provide tty
+    Globals.timeout_event.clear()
     bazel_proc = bazel_build_subproc_func(
         args=bazel_cmd,
         stdin=child_fd,
@@ -466,7 +467,6 @@ def perform_tty_bazel_build(bazel_cmd: str) -> None:
 
     buffer = ""
     os.close(child_fd)
-    Globals.timeout_event.clear()
     Globals.last_sched_target_progress = ""
     Globals.sched_time_start = time.time()
     try:
@@ -501,6 +501,7 @@ def perform_tty_bazel_build(bazel_cmd: str) -> None:
 
 
 def perform_non_tty_bazel_build(bazel_cmd: str) -> None:
+    Globals.timeout_event.clear()
     bazel_proc = bazel_build_subproc_func(
         args=bazel_cmd,
         stdout=subprocess.PIPE,
@@ -508,7 +509,7 @@ def perform_non_tty_bazel_build(bazel_cmd: str) -> None:
         env={**os.environ.copy(), **Globals.bazel_env_variables},
         text=True,
     )
-    Globals.timeout_event.clear()
+
     Globals.last_sched_target_progress = ""
     Globals.sched_time_start = time.time()
 
@@ -1232,6 +1233,7 @@ def generate(env: SCons.Environment.Environment) -> None:
         f'--use_glibcxx_debug={env.GetOption("use-glibcxx-debug") is not None}',
         f'--use_tracing_profiler={env.GetOption("use-tracing-profiler") == "on"}',
         f'--build_grpc={True if env["ENABLE_GRPC_BUILD"] else False}',
+        f'--build_otel={True if env["ENABLE_OTEL_BUILD"] else False}',
         f'--use_libcxx={env.GetOption("libc++") is not None}',
         f'--detect_odr_violations={env.GetOption("detect-odr-violations") is not None}',
         f"--linkstatic={linkstatic}",

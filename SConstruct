@@ -509,6 +509,12 @@ add_option(
 )
 
 add_option(
+    "bolt",
+    help="compile with bolt",
+    nargs=0,
+)
+
+add_option(
     "enable-http-client",
     choices=["auto", "on", "off"],
     default="auto",
@@ -1572,6 +1578,13 @@ env_vars.Add(
     "ENABLE_GRPC_BUILD",
     help="Set the boolean (auto, on/off true/false 1/0) to enable building grpc and protobuf compiler.",
     converter=functools.partial(bool_var_converter, var="ENABLE_GRPC_BUILD"),
+    default="0",
+)
+
+env_vars.Add(
+    "ENABLE_OTEL_BUILD",
+    help="Set the boolean (auto, on/off true/false 1/0) to enable building otel and protobuf compiler.",
+    converter=functools.partial(bool_var_converter, var="ENABLE_OTEL_BUILD"),
     default="0",
 )
 

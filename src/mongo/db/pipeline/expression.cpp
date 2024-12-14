@@ -52,12 +52,10 @@
 #include "mongo/base/parse_number.h"
 #include "mongo/bson/bsonelement_comparator_interface.h"
 #include "mongo/bson/bsonmisc.h"
-#include "mongo/bson/bsonobjbuilder.h"
 #include "mongo/bson/bsontypes.h"
 #include "mongo/bson/bsontypes_util.h"
 #include "mongo/bson/oid.h"
 #include "mongo/bson/timestamp.h"
-#include "mongo/bson/util/builder.h"
 #include "mongo/crypto/fle_crypto.h"
 #include "mongo/crypto/fle_field_schema_gen.h"
 #include "mongo/db/api_parameters.h"
@@ -67,17 +65,14 @@
 #include "mongo/db/exec/expression/evaluate.h"
 #include "mongo/db/feature_compatibility_version_documentation.h"
 #include "mongo/db/field_ref.h"
-#include "mongo/db/hasher.h"
 #include "mongo/db/pipeline/expression.h"
 #include "mongo/db/pipeline/expression_context.h"
 #include "mongo/db/pipeline/expression_parser_gen.h"
 #include "mongo/db/pipeline/variable_validation.h"
 #include "mongo/db/query/bson/dotted_path_support.h"
-#include "mongo/db/query/collation/collator_factory_interface.h"
 #include "mongo/db/query/query_knobs_gen.h"
 #include "mongo/db/query/random_utils.h"
 #include "mongo/db/query/util/make_data_structure.h"
-#include "mongo/db/record_id.h"
 #include "mongo/db/stats/counters.h"
 #include "mongo/idl/idl_parser.h"
 #include "mongo/platform/atomic_word.h"
@@ -86,9 +81,6 @@
 #include "mongo/platform/random.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/duration.h"
-#include "mongo/util/errno_util.h"
-#include "mongo/util/pcre.h"
-#include "mongo/util/pcre_util.h"
 #include "mongo/util/str.h"
 #include "mongo/util/string_map.h"
 #include "mongo/util/text.h"
@@ -2426,11 +2418,10 @@ void ExpressionMeta::_assertMetaFieldCompatibleWithHybridScoringFF(ExpressionCon
     static const std::set<MetaType> kHybridScoringProtectedFields = {MetaType::kScore};
     const bool usesHybridScoringProtectedField = kHybridScoringProtectedFields.contains(type);
     const bool hybridScoringFFEnabled =
-        feature_flags::gFeatureFlagSearchHybridScoringPrerequisites
-            .isEnabledUseLastLTSFCVWhenUninitialized(
-                serverGlobalParams.featureCompatibility.acquireFCVSnapshot());
+        feature_flags::gFeatureFlagRankFusionFull.isEnabledUseLastLTSFCVWhenUninitialized(
+            serverGlobalParams.featureCompatibility.acquireFCVSnapshot());
     uassert(ErrorCodes::FailedToParse,
-            "'featureFlagSearchHybridScoringPrerequisites' must be enabled to use "
+            "'featureFlagRankFusionFull' must be enabled to use "
             "this meta field",
             !usesHybridScoringProtectedField || hybridScoringFFEnabled);
 }
@@ -2471,62 +2462,7 @@ Value ExpressionMeta::serialize(const SerializationOptions& options) const {
 }
 
 Value ExpressionMeta::evaluate(const Document& root, Variables* variables) const {
-    const auto& metadata = root.metadata();
-    switch (_metaType) {
-        case MetaType::kScore:
-            return metadata.hasScore() ? Value(metadata.getScore()) : Value();
-        case MetaType::kVectorSearchScore:
-            return metadata.hasVectorSearchScore() ? Value(metadata.getVectorSearchScore())
-                                                   : Value();
-        case MetaType::kTextScore:
-            return metadata.hasTextScore() ? Value(metadata.getTextScore()) : Value();
-        case MetaType::kRandVal:
-            return metadata.hasRandVal() ? Value(metadata.getRandVal()) : Value();
-        case MetaType::kSearchScore:
-            return metadata.hasSearchScore() ? Value(metadata.getSearchScore()) : Value();
-        case MetaType::kSearchHighlights:
-            return metadata.hasSearchHighlights() ? Value(metadata.getSearchHighlights()) : Value();
-        case MetaType::kGeoNearDist:
-            return metadata.hasGeoNearDistance() ? Value(metadata.getGeoNearDistance()) : Value();
-        case MetaType::kGeoNearPoint:
-            return metadata.hasGeoNearPoint() ? Value(metadata.getGeoNearPoint()) : Value();
-        case MetaType::kRecordId: {
-            // Be sure that a RecordId can be represented by a long long.
-            static_assert(RecordId::kMinRepr >= std::numeric_limits<long long>::min());
-            static_assert(RecordId::kMaxRepr <= std::numeric_limits<long long>::max());
-            if (!metadata.hasRecordId()) {
-                return Value();
-            }
-
-            BSONObjBuilder builder;
-            metadata.getRecordId().serializeToken("", &builder);
-            return Value(builder.done().firstElement());
-        }
-        case MetaType::kIndexKey:
-            return metadata.hasIndexKey() ? Value(metadata.getIndexKey()) : Value();
-        case MetaType::kSortKey:
-            return metadata.hasSortKey()
-                ? Value(DocumentMetadataFields::serializeSortKey(metadata.isSingleElementKey(),
-                                                                 metadata.getSortKey()))
-                : Value();
-        case MetaType::kSearchScoreDetails:
-            return metadata.hasSearchScoreDetails() ? Value(metadata.getSearchScoreDetails())
-                                                    : Value();
-        case MetaType::kSearchSequenceToken:
-            return metadata.hasSearchSequenceToken() ? Value(metadata.getSearchSequenceToken())
-                                                     : Value();
-        case MetaType::kTimeseriesBucketMinTime:
-            return metadata.hasTimeseriesBucketMinTime()
-                ? Value(metadata.getTimeseriesBucketMinTime())
-                : Value();
-        case MetaType::kTimeseriesBucketMaxTime:
-            return metadata.hasTimeseriesBucketMaxTime()
-                ? Value(metadata.getTimeseriesBucketMaxTime())
-                : Value();
-        default:
-            MONGO_UNREACHABLE;
-    }
-    MONGO_UNREACHABLE;
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 /* ----------------------- ExpressionMod ---------------------------- */
@@ -3998,7 +3934,7 @@ REGISTER_EXPRESSION_WITH_FEATURE_FLAG(sigmoid,
                                       ExpressionSigmoid::parseExpressionSigmoid,
                                       AllowedWithApiStrict::kNeverInVersion1,
                                       AllowedWithClientType::kAny,
-                                      feature_flags::gFeatureFlagSearchHybridScoringPrerequisites);
+                                      feature_flags::gFeatureFlagRankFusionFull);
 
 /* ----------------------- ExpressionSize ---------------------------- */
 
@@ -4557,8 +4493,7 @@ const char* ExpressionTrunc::getOpName() const {
 /* ------------------------- ExpressionType ----------------------------- */
 
 Value ExpressionType::evaluate(const Document& root, Variables* variables) const {
-    Value val(_children[0]->evaluate(root, variables));
-    return Value(StringData(typeName(val.getType())));
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 REGISTER_STABLE_EXPRESSION(type, ExpressionType::parse);
@@ -5936,75 +5871,6 @@ auto CommonRegexParse(ExpressionContext* const expCtx,
 
 /* -------------------------- ExpressionRegex ------------------------------ */
 
-ExpressionRegex::RegexExecutionState ExpressionRegex::buildInitialState(
-    const Document& root, Variables* variables) const {
-    Value textInput = _children[_kInput]->evaluate(root, variables);
-    Value regexPattern = _children[_kRegex]->evaluate(root, variables);
-    Value regexOptions =
-        _children[_kOptions] ? _children[_kOptions]->evaluate(root, variables) : Value(BSONNULL);
-
-    auto executionState = _initialExecStateForConstantRegex.value_or(RegexExecutionState());
-
-    // The 'input' parameter can be a variable and needs to be extracted from the expression
-    // document even when '_preExecutionState' is present.
-    _extractInputField(&executionState, textInput);
-
-    // If we have a prebuilt execution state, then the 'regex' and 'options' fields are constant
-    // values, and we do not need to re-compile them.
-    if (!hasConstantRegex()) {
-        _extractRegexAndOptions(&executionState, regexPattern, regexOptions);
-        _compile(&executionState);
-    }
-
-    return executionState;
-}
-
-pcre::MatchData ExpressionRegex::execute(RegexExecutionState* regexState) const {
-    invariant(regexState);
-    invariant(!regexState->nullish());
-    invariant(regexState->pcrePtr);
-
-    StringData in = *regexState->input;
-    auto m = regexState->pcrePtr->matchView(in, {}, regexState->startBytePos);
-    uassert(51156,
-            str::stream() << "Error occurred while executing the regular expression in " << _opName
-                          << ". Result code: " << errorMessage(m.error()),
-            m || m.error() == pcre::Errc::ERROR_NOMATCH);
-    return m;
-}
-
-Value ExpressionRegex::nextMatch(RegexExecutionState* regexState) const {
-    auto m = execute(regexState);
-    if (!m)
-        // No match.
-        return Value(BSONNULL);
-
-    auto afterStart = m.input().substr(m.startPos());
-    auto beforeMatch = afterStart.substr(0, m[0].data() - afterStart.data());
-    regexState->startCodePointPos += str::lengthInUTF8CodePoints(beforeMatch);
-
-    // Set the start index for match to the new one.
-    regexState->startBytePos = m[0].data() - m.input().data();
-
-    std::vector<Value> captures;
-    captures.reserve(m.captureCount());
-
-    for (size_t i = 1; i < m.captureCount() + 1; ++i) {
-        if (StringData cap = m[i]; !cap.rawData()) {
-            // Use BSONNULL placeholder for unmatched capture groups.
-            captures.push_back(Value(BSONNULL));
-        } else {
-            captures.push_back(Value(cap));
-        }
-    }
-
-    MutableDocument match;
-    match.addField("match", Value(m[0]));
-    match.addField("idx", Value(regexState->startCodePointPos));
-    match.addField("captures", Value(std::move(captures)));
-    return match.freezeToValue();
-}
-
 boost::intrusive_ptr<Expression> ExpressionRegex::optimize() {
     _children[_kInput] = _children[_kInput]->optimize();
     _children[_kRegex] = _children[_kRegex]->optimize();
@@ -6013,33 +5879,14 @@ boost::intrusive_ptr<Expression> ExpressionRegex::optimize() {
     }
 
     if (ExpressionConstant::allNullOrConstant({_children[_kRegex], _children[_kOptions]})) {
-        _initialExecStateForConstantRegex.emplace();
-        _extractRegexAndOptions(
-            _initialExecStateForConstantRegex.get_ptr(),
+        _precompiledRegex = exec::expression::precompileRegex(
             static_cast<ExpressionConstant*>(_children[_kRegex].get())->getValue(),
             _children[_kOptions]
                 ? static_cast<ExpressionConstant*>(_children[_kOptions].get())->getValue()
-                : Value());
-        _compile(_initialExecStateForConstantRegex.get_ptr());
+                : Value(),
+            getOpName());
     }
     return this;
-}
-
-void ExpressionRegex::_compile(RegexExecutionState* executionState) const {
-    if (!executionState->pattern) {
-        return;
-    }
-
-    auto re = std::make_shared<pcre::Regex>(
-        *executionState->pattern,
-        pcre_util::flagsToOptions(executionState->options.value_or(""), _opName));
-    uassert(51111,
-            str::stream() << "Invalid Regex in " << _opName << ": " << errorMessage(re->error()),
-            *re);
-    executionState->pcrePtr = std::move(re);
-
-    // Calculate the number of capture groups present in 'pattern' and store in 'numCaptures'.
-    executionState->numCaptures = executionState->pcrePtr->captureCount();
 }
 
 Value ExpressionRegex::serialize(const SerializationOptions& options) const {
@@ -6049,60 +5896,6 @@ Value ExpressionRegex::serialize(const SerializationOptions& options) const {
                   {"regex", _children[_kRegex]->serialize(options)},
                   {"options",
                    _children[_kOptions] ? _children[_kOptions]->serialize(options) : Value()}}}});
-}
-
-void ExpressionRegex::_extractInputField(RegexExecutionState* executionState,
-                                         const Value& textInput) const {
-    uassert(51104,
-            str::stream() << _opName << " needs 'input' to be of type string",
-            textInput.nullish() || textInput.getType() == BSONType::String);
-    if (textInput.getType() == BSONType::String) {
-        executionState->input = textInput.getString();
-    }
-}
-
-void ExpressionRegex::_extractRegexAndOptions(RegexExecutionState* executionState,
-                                              const Value& regexPattern,
-                                              const Value& regexOptions) const {
-    uassert(51105,
-            str::stream() << _opName << " needs 'regex' to be of type string or regex",
-            regexPattern.nullish() || regexPattern.getType() == BSONType::String ||
-                regexPattern.getType() == BSONType::RegEx);
-    uassert(51106,
-            str::stream() << _opName << " needs 'options' to be of type string",
-            regexOptions.nullish() || regexOptions.getType() == BSONType::String);
-
-    // The 'regex' field can be a RegEx object and may have its own options...
-    if (regexPattern.getType() == BSONType::RegEx) {
-        StringData regexFlags = regexPattern.getRegexFlags();
-        executionState->pattern = regexPattern.getRegex();
-        uassert(51107,
-                str::stream()
-                    << _opName
-                    << ": found regex option(s) specified in both 'regex' and 'option' fields",
-                regexOptions.nullish() || regexFlags.empty());
-        if (!regexFlags.empty()) {
-            executionState->options = regexFlags.toString();
-        }
-    } else if (regexPattern.getType() == BSONType::String) {
-        // ...or it can be a string field with options specified separately.
-        executionState->pattern = regexPattern.getString();
-    }
-
-    // If 'options' is non-null, we must validate its contents even if 'regexPattern' is nullish.
-    if (!regexOptions.nullish()) {
-        executionState->options = regexOptions.getString();
-    }
-    uassert(51109,
-            str::stream() << _opName << ": regular expression cannot contain an embedded null byte",
-            !executionState->pattern ||
-                executionState->pattern->find('\0', 0) == std::string::npos);
-
-    uassert(51110,
-            str::stream() << _opName
-                          << ": regular expression options cannot contain an embedded null byte",
-            !executionState->options ||
-                executionState->options->find('\0', 0) == std::string::npos);
 }
 
 boost::optional<std::pair<boost::optional<std::string>, std::string>>
@@ -6177,11 +5970,7 @@ boost::intrusive_ptr<Expression> ExpressionRegexFind::parse(ExpressionContext* c
 }
 
 Value ExpressionRegexFind::evaluate(const Document& root, Variables* variables) const {
-    auto executionState = buildInitialState(root, variables);
-    if (executionState.nullish()) {
-        return Value(BSONNULL);
-    }
-    return nextMatch(&executionState);
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 /* -------------------------- ExpressionRegexFindAll ------------------------------ */
@@ -6197,54 +5986,7 @@ boost::intrusive_ptr<Expression> ExpressionRegexFindAll::parse(ExpressionContext
 }
 
 Value ExpressionRegexFindAll::evaluate(const Document& root, Variables* variables) const {
-    std::vector<Value> output;
-    auto executionState = buildInitialState(root, variables);
-    if (executionState.nullish()) {
-        return Value(std::move(output));
-    }
-    StringData input = *(executionState.input);
-    size_t totalDocSize = 0;
-
-    // Using do...while loop because, when input is an empty string, we still want to see if there
-    // is a match.
-    do {
-        auto matchObj = nextMatch(&executionState);
-        if (matchObj.getType() == BSONType::jstNULL) {
-            break;
-        }
-        totalDocSize += matchObj.getApproximateSize();
-        uassert(51151,
-                str::stream() << getOpName()
-                              << ": the size of buffer to store output exceeded the 64MB limit",
-                totalDocSize <= mongo::BufferMaxSize);
-
-        output.push_back(matchObj);
-        std::string matchStr = matchObj.getDocument().getField("match").getString();
-        if (matchStr.empty()) {
-            // This would only happen if the regex matched an empty string. In this case, even if
-            // the character at startByteIndex matches the regex, we cannot return it since we are
-            // already returing an empty string starting at this index. So we move on to the next
-            // byte index.
-            if (static_cast<size_t>(executionState.startBytePos) >= input.size())
-                continue;  // input already exhausted
-            executionState.startBytePos +=
-                str::getCodePointLength(input[executionState.startBytePos]);
-            ++executionState.startCodePointPos;
-            continue;
-        }
-
-        // We don't want any overlapping sub-strings. So we move 'startBytePos' to point to the
-        // byte after 'matchStr'. We move the code point index also correspondingly.
-        executionState.startBytePos += matchStr.size();
-        for (size_t byteIx = 0; byteIx < matchStr.size(); ++executionState.startCodePointPos) {
-            byteIx += str::getCodePointLength(matchStr[byteIx]);
-        }
-
-        invariant(executionState.startBytePos > 0);
-        invariant(executionState.startCodePointPos > 0);
-        invariant(executionState.startCodePointPos <= executionState.startBytePos);
-    } while (static_cast<size_t>(executionState.startBytePos) < input.size());
-    return Value(std::move(output));
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 /* -------------------------- ExpressionRegexMatch ------------------------------ */
@@ -6260,11 +6002,7 @@ boost::intrusive_ptr<Expression> ExpressionRegexMatch::parse(ExpressionContext* 
 }
 
 Value ExpressionRegexMatch::evaluate(const Document& root, Variables* variables) const {
-    auto state = buildInitialState(root, variables);
-    if (state.nullish())
-        return Value(false);
-    pcre::MatchData m = execute(&state);
-    return Value(!!m);
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 /* -------------------------- ExpressionRandom ------------------------------ */
@@ -6314,13 +6052,7 @@ boost::intrusive_ptr<Expression> ExpressionToHashedIndexKey::parse(ExpressionCon
 }
 
 Value ExpressionToHashedIndexKey::evaluate(const Document& root, Variables* variables) const {
-    Value inpVal(_children[0]->evaluate(root, variables));
-    if (inpVal.missing()) {
-        inpVal = Value(BSONNULL);
-    }
-
-    return Value(BSONElementHasher::hash64(BSON("" << inpVal).firstElement(),
-                                           BSONElementHasher::DEFAULT_HASH_SEED));
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 Value ExpressionToHashedIndexKey::serialize(const SerializationOptions& options) const {
@@ -6960,38 +6692,7 @@ Value ExpressionInternalKeyStringValue::serialize(const SerializationOptions& op
 }
 
 Value ExpressionInternalKeyStringValue::evaluate(const Document& root, Variables* variables) const {
-    const Value input = _children[_kInput]->evaluate(root, variables);
-    auto inputBson = input.wrap("");
-
-    std::unique_ptr<CollatorInterface> collator = nullptr;
-    if (_children[_kCollation]) {
-        const Value collation = _children[_kCollation]->evaluate(root, variables);
-        uassert(8281503,
-                str::stream() << "Collation spec must be an object, not "
-                              << typeName(collation.getType()),
-                collation.isObject());
-        auto collationBson = collation.getDocument().toBson();
-
-        auto collatorFactory = CollatorFactoryInterface::get(
-            getExpressionContext()->getOperationContext()->getServiceContext());
-        collator = uassertStatusOKWithContext(collatorFactory->makeFromBSON(collationBson),
-                                              "Invalid collation spec");
-    }
-
-    key_string::HeapBuilder ksBuilder(key_string::Version::V1);
-    if (collator) {
-        ksBuilder.appendBSONElement(inputBson.firstElement(), [&](StringData str) {
-            return collator->getComparisonString(str);
-        });
-    } else {
-        ksBuilder.appendBSONElement(inputBson.firstElement());
-    }
-    auto ksValue = ksBuilder.release();
-
-    // The result omits the typebits so that the numeric value of different types have the same
-    // binary representation.
-    return Value(
-        BSONBinData{ksValue.getBuffer(), static_cast<int>(ksValue.getSize()), BinDataGeneral});
+    return exec::expression::evaluate(*this, root, variables);
 }
 
 /* --------------------------------- Parenthesis --------------------------------------------- */
