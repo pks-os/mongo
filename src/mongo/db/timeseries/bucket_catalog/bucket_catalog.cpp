@@ -67,6 +67,7 @@ void prepareWriteBatchForCommit(TrackingContexts& trackingContexts,
                                 WriteBatch& batch,
                                 Bucket& bucket,
                                 const StringDataComparator* comparator) {
+    invariant(batch.commitRights.load());
     batch.numPreviouslyCommittedMeasurements = bucket.numCommittedMeasurements;
 
     // Filter out field names that were new at the time of insertion, but have since been committed
@@ -104,7 +105,6 @@ void prepareWriteBatchForCommit(TrackingContexts& trackingContexts,
     // See corollary in finish().
     batch.measurementMap = std::move(bucket.measurementMap);
     batch.bucketIsSortedByTime = bucket.bucketIsSortedByTime;
-    batch.generateCompressedDiff = bucket.usingAlwaysCompressedBuckets;
     batch.isReopened = bucket.isReopened;
 }
 
@@ -113,6 +113,7 @@ void prepareWriteBatchForCommit(TrackingContexts& trackingContexts,
  * Must have commit rights. Inactive batches only.
  */
 void finishWriteBatch(WriteBatch& batch, const CommitInfo& info) {
+    invariant(batch.commitRights.load());
     batch.promise.emplaceValue(info);
 }
 
@@ -588,10 +589,8 @@ boost::optional<ClosedBucket> finish(
         // See corollary in prepareWriteBatchForCommit().
         bucket->bucketIsSortedByTime = batch->bucketIsSortedByTime;
 
-        if (bucket->usingAlwaysCompressedBuckets) {
-            bucket->size -= batch->sizes.uncommittedMeasurementEstimate;
-            bucket->size += batch->sizes.uncommittedVerifiedSize;
-        }
+        bucket->size -= batch->sizes.uncommittedMeasurementEstimate;
+        bucket->size += batch->sizes.uncommittedVerifiedSize;
         bucket->measurementMap = std::move(batch->measurementMap);
         bucket->preparedBatch.reset();
     }
@@ -656,6 +655,7 @@ boost::optional<ClosedBucket> finish(
 
 void abort(BucketCatalog& catalog, std::shared_ptr<WriteBatch> batch, const Status& status) {
     invariant(batch);
+    invariant(batch->commitRights.load());
 
     if (isWriteBatchFinished(*batch)) {
         return;

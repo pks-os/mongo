@@ -570,7 +570,7 @@ def run_bazel_command(env, bazel_cmd, tries_so_far=0):
                 "Build failed, retrying with --jobs=4 in case linking failed due to hitting concurrency limits..."
             )
             run_bazel_command(
-                env, bazel_cmd + ["--jobs", "4", "--link_timeout_8min=False"], tries_so_far=1
+                env, bazel_cmd + ["--jobs", "4", "--link_timeout=False"], tries_so_far=1
             )
             return
 
@@ -1261,7 +1261,7 @@ def generate(env: SCons.Environment.Environment) -> None:
     # Timeout linking at 8 minutes to retry with a lower concurrency.
     if os.environ.get("CI") is not None:
         bazel_internal_flags += [
-            "--link_timeout_8min=True",
+            "--link_timeout=True",
         ]
 
     if not os.environ.get("USE_NATIVE_TOOLCHAIN"):
@@ -1280,11 +1280,6 @@ def generate(env: SCons.Environment.Environment) -> None:
                 f"--//bazel/config:enterprise_feature_{feature}=True"
                 for feature in enterprise_features.split(",")
             ]
-
-    # TODO SERVER-97028
-    # remove when ssl disabled builds are fixed
-    if env.GetOption("ssl") == "off":
-        bazel_internal_flags += ["--keep_going"]
 
     if env.GetOption("gcov") is not None:
         bazel_internal_flags += ["--collect_code_coverage"]
