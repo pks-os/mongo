@@ -990,7 +990,6 @@ mongo_cc_library(
         "//src/mongo/db/auth:authprivilege",  # TODO(SERVER-93876): Remove.
         "//src/mongo/db/auth:user_acquisition_stats",
         "//src/mongo/db/catalog:collection_options",  # TODO(SERVER-93876): Remove.
-        "//src/mongo/db/catalog:local_oplog_info",
         "//src/mongo/db/commands:create_command",  # TODO(SERVER-93876): Remove.
         "//src/mongo/db/commands:server_status_core",  # TODO(SERVER-93876): Remove.
         "//src/mongo/db/commands:test_commands_enabled",  # TODO(SERVER-93876): Remove.
@@ -4115,6 +4114,20 @@ mongo_cc_benchmark(
     deps = [
         ":service_context_non_d",
         ":shard_role_api",
+    ],
+)
+
+mongo_cc_benchmark(
+    name = "collection_acquisition_bm",
+    srcs = [
+        "collection_acquisition_bm.cpp",
+        "//src/mongo/unittest:join_thread.h",
+    ],
+    deps = [
+        ":service_context_d_test_fixture",
+        ":shard_role",
+        ":shard_role_api",
+        "//src/mongo/db/repl:replmocks",
     ],
 )
 

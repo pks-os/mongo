@@ -301,7 +301,7 @@ tasks:
           targets: >-
             install-benchmarks
             archive-benchmarks
-          bazel_build_tags: --bazel-build-tag=mongo_benchmark --bazel-build-tag=mongo_library
+          bazel_build_tags: --bazel-build-tag=mongo_benchmark --bazel-build-tag=mongo_library --bazel-build-tag=-repl_bm
           compiling_for_test: true
       - command: s3.put
         params:
@@ -606,17 +606,6 @@ tasks:
           permissions: public-read
           content_type: text/plain
           display_name: Bazel Target Conversions
-
-      - command: s3.put
-        params:
-          aws_key: ${aws_key}
-          aws_secret: ${aws_secret}
-          local_file: src/bazel_order_core.txt
-          remote_file: ${project}/${build_variant}/${revision}/artifacts/bazel_order_core.txt.${build_id}-${task_name}.${execution}
-          bucket: mciuploads
-          permissions: public-read
-          content_type: text/plain
-          display_name: Bazel Target Conversions Core Binaries
 
       - command: s3.put
         params:
