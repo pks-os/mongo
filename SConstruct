@@ -1582,13 +1582,6 @@ env_vars.Add(
 )
 
 env_vars.Add(
-    "ENABLE_OTEL_BUILD",
-    help="Set the boolean (auto, on/off true/false 1/0) to enable building otel and protobuf compiler.",
-    converter=functools.partial(bool_var_converter, var="ENABLE_OTEL_BUILD"),
-    default="0",
-)
-
-env_vars.Add(
     "GDB",
     help="Configures the path to the 'gdb' debugger binary.",
 )
@@ -4523,6 +4516,8 @@ def doConfigure(myenv):
                 "handle_abort=1",
                 "strict_string_checks=true",
                 "detect_invalid_pointer_pairs=1",
+                "detect_stack_use_after_return=1",
+                "max_uar_stack_size_log=16",
             ]
             asan_options = ":".join(asan_options_clear)
             lsan_options = (
@@ -6788,17 +6783,19 @@ if env.get("__NINJA_NO") != "1":
         else:
             pass
 
-        for debug_file in debug_files:
-            setattr(debug_file.attributes, "debug_file_for", bazel_node)
-        setattr(bazel_node.attributes, "separate_debug_files", debug_files)
+        if debug_symbols:
+            for debug_file in debug_files:
+                setattr(debug_file.attributes, "debug_file_for", bazel_node)
+            setattr(bazel_node.attributes, "separate_debug_files", debug_files)
 
         installed_prog = env.BazelAutoInstallSingleTarget(bazel_node, suffix, bazel_node)
 
         installed_debugs = []
-        for debug_file in debug_files:
-            installed_debugs.append(
-                env.BazelAutoInstallSingleTarget(debug_file, debug_suffix, debug_file)
-            )
+        if debug_symbols:
+            for debug_file in debug_files:
+                installed_debugs.append(
+                    env.BazelAutoInstallSingleTarget(debug_file, debug_suffix, debug_file)
+                )
 
         libs = []
         debugs = []

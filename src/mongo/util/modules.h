@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2019-present MongoDB, Inc.
+ *    Copyright (C) 2024-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -29,18 +29,35 @@
 
 #pragma once
 
-#include "mongo/base/status_with.h"
-#include "mongo/bson/bsonobj.h"
-#include "mongo/db/jsobj.h"
-#include "mongo/db/namespace_string.h"
-#include "mongo/db/query/count_command_gen.h"
+#include "mongo/platform/compiler.h"
 
-namespace mongo {
+/** Marks a declaration and everything inside as public to other modules */
+#define MONGO_MOD_PUB MONGO_MOD_ATTR_(public)
+
+/** Marks a declaration and everything inside as unfortunately public to other modules */
+#define MONGO_MOD_UNFORTUNATELY_PUB MONGO_MOD_ATTR_(unfortunately_public)
+
+/** Marks a declaration and everything inside as private from other modules */
+#define MONGO_MOD_PRIVATE MONGO_MOD_ATTR_(private)
 
 /**
- * Converts this CountCommandRequest into an aggregation.
+ * Marks a declaration as public but not the insides,
+ * eg to allow fine-grained control over a class.
  */
-StatusWith<BSONObj> countCommandAsAggregationCommand(const CountCommandRequest& cmd,
-                                                     const NamespaceString& nss);
+#define MONGO_MOD_SHALLOW_PUB MONGO_MOD_ATTR_(shallow::public)
 
-}  // namespace mongo
+/**
+ * Marks a declaration as unfortunately public but not the insides,
+ * eg to allow fine-grained control over a class.
+ */
+#define MONGO_MOD_SHALLOW_UNFORTUNATELY_PUB MONGO_MOD_ATTR_(shallow::unfortunately_public)
+
+//
+// Implementation details for MONGO_MOD macros
+//
+
+#if MONGO_COMPILER_HAS_ATTRIBUTE(clang::annotate)
+#define MONGO_MOD_ATTR_(attr) [[clang::annotate("mongo::mod::" #attr)]]
+#else
+#define MONGO_MOD_ATTR_(attr)
+#endif

@@ -1390,6 +1390,11 @@ StatusWith<std::vector<std::unique_ptr<QuerySolution>>> QueryPlanner::plan(
                 "$hint: refusing to build whole-index solution, because it's a wildcard index");
         }
 
+        LOGV2_WARNING(
+            2658100,
+            "Hinted index could not provide a bounded scan, reverting to whole index scan",
+            "hint"_attr = redact(hintedIndexBson->toString()));
+
         // Return hinted index solution if found.
         if (auto soln = buildWholeIXSoln(relevantIndices.front(), query, params)) {
             LOGV2_DEBUG(20980, 5, "Planner: outputting soln that uses hinted index as scan");
@@ -1582,7 +1587,8 @@ StatusWith<std::vector<std::unique_ptr<QuerySolution>>> QueryPlanner::plan(
     }
 
     bool isClusteredIDXScan = false;
-    if (!mustUseIndexedPlan && (collscanRequested || collScanRequired || clusteredCollection)) {
+    if (!mustUseIndexedPlan && (collscanRequested || collScanRequired || clusteredCollection) &&
+        !noTableAndClusteredIDXScan(params)) {
         boost::optional<int> clusteredScanDirection =
             QueryPlannerCommon::determineClusteredScanDirection(query, params);
         int direction = clusteredScanDirection.value_or(1);
