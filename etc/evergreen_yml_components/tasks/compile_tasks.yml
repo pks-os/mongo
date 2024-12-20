@@ -301,7 +301,7 @@ tasks:
           targets: >-
             install-benchmarks
             archive-benchmarks
-          bazel_build_tags: --bazel-build-tag=mongo_benchmark --bazel-build-tag=mongo_library --bazel-build-tag=-repl_bm --bazel-build-tag=-query_bm --bazel-build-tag=-bsoncolumn_bm --bazel-build-tag=-first_half_bm --bazel-build-tag=-second_half_bm --bazel-build-tag=-query_nond_bm --bazel-build-tag=-wt_storage_bm --bazel-build-tag=-sharding_bm
+          bazel_build_tags: --bazel-build-tag=mongo_benchmark --bazel-build-tag=mongo_library --bazel-build-tag=-repl_bm --bazel-build-tag=-query_bm --bazel-build-tag=-bsoncolumn_bm --bazel-build-tag=-first_half_bm --bazel-build-tag=-second_half_bm --bazel-build-tag=-wt_storage_bm --bazel-build-tag=-sharding_bm
           compiling_for_test: true
       - command: s3.put
         params:
@@ -843,6 +843,7 @@ tasks:
         vars:
           targets: archive-fuzzertests
           compiling_for_test: true
+          bazel_build_tags: --bazel-build-tag=dist_test --bazel-build-tag=mongo_fuzzer_test
       # Store the fuzzer executable, which we use to generate and run fuzzer inputs.
       - command: s3.put
         params:

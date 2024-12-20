@@ -17,7 +17,7 @@ include:
   - filename: evergreen/system_perf/shared_tasks.yml
     module: dsi
   - filename: evergreen/system_perf/master/genny_tasks.yml
-    module: genny
+    module: dsi
   ### lint_yaml trim end ###
 
 ## Parameters for parameterized builds (see https://github.com/evergreen-ci/evergreen/wiki/Parameterized-Builds)
@@ -325,6 +325,10 @@ functions:
 tasks:
   - name: schedule_compile
     commands:
+      - command: expansions.write
+        params:
+          file: expansions.yml
+          redacted: true
       - command: git.get_project
         params:
           directory: src
@@ -369,6 +373,7 @@ buildvariants:
       compile_variant: amazon2-arm64-compile
       compile_task_name: archive_dist_test
       binary_artifact_name: Binaries
+      skip_post_run: true
     modules: *modules
     run_on:
       - amazon2-arm64-latest-small
@@ -382,6 +387,7 @@ buildvariants:
       compile_variant: amazon2023-arm64-compile
       compile_task_name: archive_dist_test
       binary_artifact_name: Binaries
+      skip_post_run: true
     modules: *modules
     run_on:
       - amazon2023-arm64-latest-small
@@ -395,6 +401,7 @@ buildvariants:
       compile_variant: amazon2-x86-compile
       compile_task_name: archive_dist_test
       binary_artifact_name: Binaries
+      skip_post_run: true
     modules: *modules
     run_on:
       - amazon2-latest-small
@@ -408,6 +415,7 @@ buildvariants:
       compile_variant: amazon2-arm64-compile-pgo
       compile_task_name: archive_dist_test
       binary_artifact_name: Binaries
+      skip_post_run: true
     modules: *modules
     run_on:
       - amazon2-arm64-latest-small
@@ -421,6 +429,7 @@ buildvariants:
       compile_variant: amazon2-arm64-compile-bolt
       compile_task_name: archive_dist_test
       binary_artifact_name: Binaries
+      skip_post_run: true
     modules: *modules
     run_on:
       - amazon2-arm64-latest-small
@@ -434,6 +443,7 @@ buildvariants:
       compile_variant: amazon2-arm64-mongocrypt-shlib-compile
       compile_task_name: crypt_create_lib
       binary_artifact_name: Mongo crypt Library
+      skip_post_run: true
     modules: *modules
     run_on:
       - amazon2-arm64-latest-small
@@ -446,6 +456,7 @@ buildvariants:
       compile_variant: amazon2-x86-streams-compile
       compile_task_name: archive_dist_test
       binary_artifact_name: Binaries
+      skip_post_run: true
     modules: *modules
     run_on:
       - amazon2-arm64-latest-small
