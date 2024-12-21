@@ -14,6 +14,20 @@ compiler_type = rule(
     build_setting = config.string(flag = True),
 )
 
+# =========
+# mongo_toolchain_version
+# =========
+
+mongo_toolchain_version_provider = provider(
+    doc = "Select the mongo toolchain version (e.g.: v4)",
+    fields = {"mongo_toolchain_version": "Choose one of [v4, v5]"},
+)
+
+mongo_toolchain_version = rule(
+    implementation = lambda ctx: mongo_toolchain_version_provider(mongo_toolchain_version = ctx.build_setting_value),
+    build_setting = config.string(flag = True),
+)
+
 # ==========
 # linker
 # ==========
@@ -322,6 +336,20 @@ shared_archive_provider = provider(
 
 shared_archive = rule(
     implementation = lambda ctx: shared_archive_provider(enabled = ctx.build_setting_value),
+    build_setting = config.bool(flag = True),
+)
+
+# =========
+# skip_archive
+# =========
+
+skip_archive_provider = provider(
+    doc = "Skip generating archives in favor of using --start-lib --end-lib",
+    fields = ["enabled"],
+)
+
+skip_archive = rule(
+    implementation = lambda ctx: skip_archive_provider(enabled = ctx.build_setting_value),
     build_setting = config.bool(flag = True),
 )
 

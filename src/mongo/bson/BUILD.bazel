@@ -88,7 +88,10 @@ mongo_cc_fuzzer_test(
         "bson_validate_old.cpp",
         "bson_validate_old.h",
     ],
-    deps = [],
+    deps = [
+        "//src/mongo:base",
+        "//src/mongo/bson:bson_validate",
+    ],
 )
 
 mongo_cc_benchmark(
