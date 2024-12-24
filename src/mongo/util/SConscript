@@ -50,12 +50,8 @@ env.SConscript(
 
 env.Benchmark(
     target="fail_point_bm",
-    source=[
-        "fail_point_bm.cpp",
-    ],
-    LIBDEPS=[
-        "fail_point",
-    ],
+    source=[],
+    LIBDEPS=[],
 )
 
 env.CppUnitTest(
@@ -85,113 +81,51 @@ env.CppUnitTest(
     PROVE_ALIASES=["server-programmability"],
 )
 
-tcmallocAttrs = None
-for impl in [
-    {
-        # Modern standalone tcmalloc (not gperftools)
-        "options": ["tcmalloc-google"],
-        "sys_name": "tcmalloc-google",
-        "inject": "tcmalloc",
-        "cppdefs": [],
-    },
-    {
-        # Old gperftools tcmalloc
-        "options": ["tcmalloc-gperf"],
-        "sys_name": "tcmalloc-gperf",
-        "inject": "gperftools",
-        # If our changes to tcmalloc are ever upstreamed, this should become set based on a top
-        # level configure check, though its effects should still be scoped just to these files.
-        "cppdefs": [
-            "MONGO_HAVE_GPERFTOOLS_SIZE_CLASS_STATS",
-        ],
-    },
-]:
-    if env["MONGO_ALLOCATOR"] in impl["options"]:
-        tcmallocAttrs = impl
-
-if tcmallocAttrs:
-    tcmspEnv = env.Clone()
-    if not use_system_version_of_library(tcmallocAttrs["sys_name"]):
-        tcmspEnv.InjectThirdParty(tcmallocAttrs["inject"])
-    tcmspEnv.Append(CPPDEFINES=tcmallocAttrs["cppdefs"])
-
-    if tcmspEnv.ToolchainIs("clang", "GCC"):
-        tcmspEnv.Append(CCFLAGS=["-Wno-sign-compare"])
-
-    if not use_system_version_of_library("valgrind"):
-        # Include valgrind since tcmalloc disables itself while running under valgrind
-        tcmspEnv.InjectThirdParty("valgrind")
-
-    tcmspEnv.CppUnitTest(
+if env["MONGO_ALLOCATOR"] in set(["tcmalloc-google", "tcmalloc-gperf"]):
+    env.CppUnitTest(
         target="tcmalloc_set_parameters_test",
-        source=[
-            "tcmalloc_set_parameter_test.cpp",
-        ],
-        LIBDEPS=[
-            "$BUILD_DIR/mongo/db/commands/server_status_core",
-            "$BUILD_DIR/mongo/db/server_base",
-            "processinfo",
-            "tcmalloc_server_status",
-            "tcmalloc_set_parameter",
-        ],
+        source=[],
     )
 
 env.Benchmark(
     target="clock_source_bm",
-    source=[
-        "clock_source_bm.cpp",
-    ],
-    LIBDEPS=[
-        "clock_sources",
-        "processinfo",
-    ],
-    CONSOLIDATED_TARGET="first_half_bm",
+    source=[],
+    LIBDEPS=[],
+    BAZEL_BENCHMARK_TAG="first_half_bm",
 )
 
 env.CppUnitTest(
     target="executor_stats_test",
-    source=[
-        "executor_stats_test.cpp",
-    ],
-    LIBDEPS=[
-        "$BUILD_DIR/mongo/util/clock_source_mock",
-        "$BUILD_DIR/mongo/util/executor_stats",
-    ],
+    source=[],
+    LIBDEPS=[],
     PROVE_ALIASES=["server-programmability"],
 )
 
 env.Benchmark(
     target="decimal_counter_bm",
-    source=[
-        "decimal_counter_bm.cpp",
-    ],
+    source=[],
     LIBDEPS=[],
-    CONSOLIDATED_TARGET="first_half_bm",
+    BAZEL_BENCHMARK_TAG="first_half_bm",
 )
 
 env.Benchmark(
     target="itoa_bm",
-    source=[
-        "itoa_bm.cpp",
-    ],
+    source=[],
     LIBDEPS=[],
 )
 
 env.Benchmark(
     target="future_bm",
-    source=[
-        "future_bm.cpp",
-    ],
+    source=[],
     LIBDEPS=[],
+    BAZEL_BENCHMARK_TAG="first_half_bm",
 )
 
 env.Benchmark(
     target="tick_source_bm",
-    source=[
-        "tick_source_bm.cpp",
-    ],
+    source=[],
     LIBDEPS=[],
-    CONSOLIDATED_TARGET="first_half_bm",
+    BAZEL_BENCHMARK_TAG="first_half_bm",
 )
 
 pcre_env = env.Clone()
@@ -199,7 +133,7 @@ pcre_env.InjectThirdParty(libraries=["pcre2"])
 
 env.Benchmark(
     target="hash_table_bm",
-    source="hash_table_bm.cpp",
+    source=[],
     LIBDEPS=[],
 )
 
@@ -233,16 +167,8 @@ icuEnv.CppUnitTest(
 if not env.TargetOSIs("windows"):
     icuEnv.CppUnitTest(
         target="signal_handlers_test",
-        source=[
-            "signal_handlers_asynchronous_test.cpp",
-            "signal_handlers_synchronous_test.cpp",
-        ],
-        LIBDEPS=[
-            "$BUILD_DIR/mongo/base",
-            "$BUILD_DIR/mongo/db/service_context_non_d",
-            "signal_handlers",
-            "version_impl",
-        ],
+        source=[],
+        LIBDEPS=[],
         PROVE_ALIASES=["server-programmability"],
     )
 
@@ -253,33 +179,15 @@ if env.TargetOSIs("windows"):
         LIBDEPS=[],
     )
 
-env.Benchmark(target="base64_bm", source="base64_bm.cpp", CONSOLIDATED_TARGET="first_half_bm")
+env.Benchmark(target="base64_bm", source=[], BAZEL_BENCHMARK_TAG="first_half_bm")
 
 stacktraceEnv = env.Clone()
 if use_libunwind:
     stacktraceEnv.InjectThirdParty(libraries=["unwind"])
     stacktraceEnv.CppUnitTest(
-        target=[
-            "stacktrace_libunwind_test",
-        ],
-        source=[
-            "stacktrace_libunwind_test_functions.cpp",
-            "stacktrace_libunwind_test.cpp",
-        ],
+        target="stacktrace_libunwind_test",
+        source=[],
         PROVE_ALIASES=["server-programmability"],
-        # Do not add LIBDEPS the ordinary way here, as they will override
-        # the LIBDEPS settings for stacktraceEnv, configured above. If
-        # you must add new libdeps here, or for the similar cases
-        # below, do it as follows:
-        #
-        # LIBDEPS=(stacktraceEnv.get('LIBDEPS', []) + [
-        #     some_new_libdep,
-        #     another_new_libdep,
-        # ]),
-        #
-        # to ensure that the new library dependency is added to the
-        # existing LIBDEPS state in the environment and does not
-        # overwrite it.
     )
 
 stacktrace_test_LIBDEPS = stacktraceEnv.get("LIBDEPS", []).copy()
@@ -287,48 +195,39 @@ insort_wrapper(stacktrace_test_LIBDEPS, "pcre_wrapper")
 
 stacktraceEnv.CppUnitTest(
     target="stacktrace_test",
-    source=[
-        "stacktrace_test.cpp",
-    ],
-    LIBDEPS=stacktrace_test_LIBDEPS,
-    EXPORT_SYMBOLS=[
-        "mongo_stacktrace_test_detail_testFunctionWithLinkage",
-    ],
+    source=[],
     PROVE_ALIASES=["server-programmability"],
 )
 
 stacktraceEnv.Benchmark(
     target="stacktrace_bm",
-    source="stacktrace_bm.cpp",
+    source=[],
     # See above for how to handle any future LIBDEPS additions here.
     # LIBDEPS=...
+    BAZEL_BENCHMARK_TAG="first_half_bm",
 )
 
 env.Benchmark(
     target="string_bm",
-    source="string_bm.cpp",
+    source=[],
+    BAZEL_BENCHMARK_TAG="first_half_bm",
 )
 
 env.Benchmark(
     target="cancellation_bm",
-    source="cancellation_bm.cpp",
+    source=[],
 )
 
 env.Benchmark(
     target="inline_memory_bm",
-    source="inline_memory_bm.cpp",
+    source=[],
 )
 
 env.Benchmark(
     target="uuid_bm",
-    source=[
-        "uuid_bm.cpp",
-    ],
-    LIBDEPS=[
-        "$BUILD_DIR/mongo/base",
-        "processinfo",
-    ],
-    CONSOLIDATED_TARGET="first_half_bm",
+    source=[],
+    LIBDEPS=[],
+    BAZEL_BENCHMARK_TAG="first_half_bm",
 )
 
 pretty_printer_test_program = env.BazelProgram(

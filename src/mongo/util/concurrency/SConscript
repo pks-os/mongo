@@ -11,18 +11,7 @@ env.CppUnitTest(
     PROVE_ALIASES=["server-programmability"],
 )
 
-env.CppUnitTest(
-    target="ticketholder_test",
-    source=[
-        "ticketholder_test.cpp",
-    ],
-    LIBDEPS=[
-        "$BUILD_DIR/mongo/db/auth/authmocks",
-        "$BUILD_DIR/mongo/db/service_context_non_d",
-        "$BUILD_DIR/mongo/db/service_context_test_fixture",
-        "$BUILD_DIR/mongo/util/concurrency/ticketholder",
-    ],
-)
+env.CppUnitTest(target="ticketholder_test", source=[])
 
 env.Benchmark(
     target="ticketholder_bm",
@@ -33,12 +22,8 @@ env.Benchmark(
 
 env.Benchmark(
     target="lock_free_read_list_bm",
-    source=[
-        "lock_free_read_list_bm.cpp",
-    ],
-    LIBDEPS=[
-        "$BUILD_DIR/mongo/util/processinfo",
-    ],
+    source=[],
+    LIBDEPS=[],
 )
 
 env.CppUnitTest(
