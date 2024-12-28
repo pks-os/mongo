@@ -391,27 +391,6 @@ tasks:
           args:
             - "./src/evergreen/todos_check.sh"
 
-  - name: determine_patch_tests
-    tags: ["assigned_to_jira_team_devprod_correctness", "auxiliary"]
-    commands:
-      - func: "f_expansions_write"
-      - command: github.generate_token
-        params:
-          owner: 10gen
-          repo: coredb-patchbuild-optimizer
-          expansion_name: github_token
-          permissions:
-            metadata: read
-            contents: read
-      - command: subprocess.exec
-        type: test
-        params:
-          binary: bash
-          args:
-            - "src/evergreen/gen_patch_test_tags.sh"
-          include_expansions_in_env:
-            - "github_token"
-
   - name: generate_buildid_to_debug_symbols_mapping
     tags:
       [
@@ -959,6 +938,17 @@ tasks:
             - "--generate-report"
             - "--binary-dir=./"
             - "lint-all"
+      - command: s3.put
+        params:
+          optional: true
+          aws_key: ${aws_key}
+          aws_secret: ${aws_secret}
+          local_file: src/local-buildifier-invocation.txt
+          remote_file: ${project}/${build_variant}/${revision}/local-buildifier-invocation-${task_id}-${execution}.txt
+          bucket: mciuploads
+          permissions: public-read
+          content_type: text/plain
+          display_name: Buildifier.py Invocation for Local Usage
 
   # TODO: DEVPROD-9047 Enable after the issue with getting third party file is resolved
   - name: lint_sbom
@@ -1135,11 +1125,20 @@ tasks:
           #   bazel test $targets
           target: >-
             //src/mongo/...
+          # -Wno-mismatched-new-delete to address https://gcc.gnu.org/bugzilla/show_bug.cgi?id=100485
+          # which appears to only happen when coverage is enabled. It seems like enabling coverage is
+          # changing inlining behavior, since this doesn't manifest when -fno-inline is passed in.
           args: >-
+            --config=dbg
+            --compiler_type=gcc
+            --linkstatic=False
             --test_output=all
-            --config=local
             --combined_report=lcov
-            --build_tag_filters=mongo_unittest
+            --test_tag_filters=mongo_unittest,-intermediate_target,-code_coverage_quarantine
+            --test_timeout=600
+            --verbose_failures
+            --copt=-Wno-mismatched-new-delete
+            ${coverage_bazel_tags}
 
   - name: monitor_build_status
     tags: ["assigned_to_jira_team_devprod_correctness", "auxiliary"]

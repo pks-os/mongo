@@ -702,7 +702,12 @@ def validate_remote_execution_certs(env: SCons.Environment.Environment) -> bool:
     # Check engflow_auth existence
     if os.path.exists(get_default_engflow_auth_path()):
         # Check engflow_auth token presence
-        if os.path.exists(
+        appdata = os.getenv("APPDATA", "").replace("\\", "/")
+        if os.name == "nt" and os.path.exists(
+            os.path.expanduser(f"{appdata}/engflow_auth/tokens/sodalite.cluster.engflow.com")
+        ):
+            return True
+        elif os.path.exists(
             os.path.expanduser("~/.config/engflow_auth/tokens/sodalite.cluster.engflow.com")
         ):
             return True
@@ -1398,7 +1403,7 @@ def generate(env: SCons.Environment.Environment) -> None:
         f'--ssl={"True" if env.GetOption("ssl") == "on" else "False"}',
         f'--js_engine={env.GetOption("js-engine")}',
         f'--use_sasl_client={env.GetOption("use-sasl-client") is not None}',
-        "--skip_archive=False",
+        f'--skip_archive={env.GetOption("skip-archive") != "off" and normalized_os == "linux"}',
         "--define",
         f"MONGO_VERSION={mongo_version}",
         "--define",
