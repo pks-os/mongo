@@ -33,6 +33,7 @@
 
 #include "mongo/base/status.h"
 #include "mongo/base/string_data.h"
+#include "mongo/crypto/mongocrypt_definitions.h"
 
 typedef struct _mongocrypt_status_t mongocrypt_status_t;
 

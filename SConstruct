@@ -359,6 +359,15 @@ add_option(
 )
 
 add_option(
+    "skip-archive",
+    choices=["on", "off"],
+    default="off",
+    help="Enable runtime debugging checks",
+    nargs="?",
+    type="choice",
+)
+
+add_option(
     "disable-ref-track",
     help="Disables runtime tracking of REF state changes for pages within wiredtiger. "
     "Tracking the REF state changes is useful for debugging but there is a small performance cost.",
@@ -1557,6 +1566,13 @@ env_vars.Add(
     "ENABLE_GRPC_BUILD",
     help="Set the boolean (auto, on/off true/false 1/0) to enable building grpc and protobuf compiler.",
     converter=functools.partial(bool_var_converter, var="ENABLE_GRPC_BUILD"),
+    default="0",
+)
+
+env_vars.Add(
+    "ENABLE_OTEL_BUILD",
+    help="Set the boolean (auto, on/off true/false 1/0) to enable building otel and protobuf compiler.",
+    converter=functools.partial(bool_var_converter, var="ENABLE_OTEL_BUILD"),
     default="0",
 )
 
