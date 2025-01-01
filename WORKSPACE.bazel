@@ -186,9 +186,9 @@ poetry(
     name = "poetry",
     lockfile = "//:poetry.lock",
     pyproject = "//:pyproject.toml",
-    python_interpreter_target_default = "@py_host//:bin/python3",
-    python_interpreter_target_mac = "@py_host//:bin/python3",
-    python_interpreter_target_win = "@py_host//:python.exe",
+    python_interpreter_target_default = "@py_host//:dist/bin/python3",
+    python_interpreter_target_mac = "@py_host//:dist/bin/python3",
+    python_interpreter_target_win = "@py_host//:dist/python.exe",
 )
 
 http_archive(
@@ -299,8 +299,8 @@ load("@rules_pkg//:deps.bzl", "rules_pkg_dependencies")
 
 rules_pkg_dependencies()
 
-new_local_repository(
+load("//bazel/install_rules:pigz.bzl", "setup_pigz")
+
+setup_pigz(
     name = "pigz",
-    build_file = "//bazel:BUILD.pigz",
-    path = "/usr/bin",
 )

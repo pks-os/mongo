@@ -58,6 +58,9 @@ if [[ -f /etc/os-release ]]; then
   if [[ $DISTRO == "Amazon Linux 2" ]]; then
     export SSL_CERT_DIR=/etc/pki/tls/certs
     export SSL_CERT_FILE=/etc/pki/tls/certs/ca-bundle.crt
+  elif [[ $DISTRO == "Red Hat Enterprise Linux"* ]]; then
+    export SSL_CERT_DIR=/etc/pki/ca-trust/extracted/pem
+    export SSL_CERT_FILE=/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
   fi
 fi
 
@@ -68,8 +71,8 @@ echo "bazel run --verbose_failures $LOCAL_ARG ${args} ${target}" >> bazel-invoca
 # Run bazel command, retrying up to five times
 MAX_ATTEMPTS=5
 for ((i = 1; i <= $MAX_ATTEMPTS; i++)); do
-  eval $BAZEL_BINARY run --verbose_failures $LOCAL_ARG ${args} ${target} &>> bazel_output.log && RET=0 && break || RET=$? && sleep 1
-  if [ $i -lt $MAX_ATTEMPTS ]; then echo "Bazel failed to execute, retrying ($(($i + 1)) of $MAX_ATTEMPTS attempts)... " &>> bazel_output.log; fi
+  eval $BAZEL_BINARY run --verbose_failures $LOCAL_ARG ${args} ${target} >> bazel_output.log 2>&1 && RET=0 && break || RET=$? && sleep 1
+  if [ $i -lt $MAX_ATTEMPTS ]; then echo "Bazel failed to execute, retrying ($(($i + 1)) of $MAX_ATTEMPTS attempts)... " >> bazel_output.log 2>&1; fi
 done
 
 $python ./buildscripts/simple_report.py --test-name "bazel run ${args} ${target}" --log-file bazel_output.log --exit-code $RET
