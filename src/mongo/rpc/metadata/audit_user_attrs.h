@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2023-present MongoDB, Inc.
+ *    Copyright (C) 2024-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -29,46 +29,30 @@
 
 #pragma once
 
-#include <memory>
+#include <boost/optional.hpp>
+#include <vector>
 
+#include "mongo/db/auth/role_name.h"
+#include "mongo/db/auth/user_name.h"
 #include "mongo/db/operation_context.h"
-#include "mongo/db/query/multiple_collection_accessor.h"
-#include "mongo/db/query/plan_executor.h"
-#include "mongo/db/query/plan_yield_policy.h"
 
-namespace mongo {
+namespace mongo::rpc {
 
 /**
- * A PlanYieldPolicy for remote cursors to yield and release storage resources during network call.
+ * An OperationContext decoration that contains username and roles data for the currently
+ * authenticated user or currently impersonated user. This is used to audit correct user
+ * information for an operation.
  */
-class PlanYieldPolicyRemoteCursor final : public PlanYieldPolicy {
+class AuditUserAttrs {
 public:
-    static std::unique_ptr<PlanYieldPolicyRemoteCursor> make(
-        OperationContext* opCtx,
-        PlanYieldPolicy::YieldPolicy policy,
-        const MultipleCollectionAccessor& collections,
-        NamespaceString nss,
-        PlanExecutor* exec = nullptr);
+    AuditUserAttrs(boost::optional<UserName> userName, std::vector<RoleName> roleNames)
+        : userName(std::move(userName)), roleNames(std::move(roleNames)){};
 
-    void registerPlanExecutor(PlanExecutor* exec) {
-        _exec = exec;
-    }
+    static AuditUserAttrs* get(OperationContext* opCtx);
+    static void set(OperationContext* opCtx, std::unique_ptr<AuditUserAttrs> auditUserAttrs);
 
-private:
-    PlanYieldPolicyRemoteCursor(OperationContext* opCtx,
-                                PlanYieldPolicy::YieldPolicy policy,
-                                std::variant<const Yieldable*, YieldThroughAcquisitions> yieldable,
-                                std::unique_ptr<YieldPolicyCallbacks> callbacks,
-                                PlanExecutor* exec = nullptr);
-
-    void saveState(OperationContext* opCtx) override;
-
-    void restoreState(OperationContext* opCtx,
-                      const Yieldable* yieldable,
-                      RestoreContext::RestoreType restoreType) override;
-
-    // The plan executor which this yield policy is responsible for yielding.
-    PlanExecutor* _exec;
+    boost::optional<UserName> userName;
+    std::vector<RoleName> roleNames;
 };
 
-}  // namespace mongo
+}  // namespace mongo::rpc
