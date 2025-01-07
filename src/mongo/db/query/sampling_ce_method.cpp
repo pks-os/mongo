@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2019-present MongoDB, Inc.
+ *    Copyright (C) 2025-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -27,16 +27,31 @@
  *    it in the license file.
  */
 
+#include <boost/optional/optional.hpp>
 
-#include "mongo/db/exec/sort_executor.h"
-#include "mongo/db/exec/working_set.h"
+#include "mongo/base/error_codes.h"
+#include "mongo/base/status.h"
+#include "mongo/base/string_data.h"
+#include "mongo/bson/bsonmisc.h"
+#include "mongo/bson/bsonobjbuilder.h"
+#include "mongo/db/operation_context.h"
+#include "mongo/db/query/query_knobs_gen.h"
+#include "mongo/db/tenant_id.h"
+#include "mongo/idl/idl_parser.h"
+#include "mongo/util/synchronized_value.h"
 
-#include "mongo/db/sorter/sorter.cpp"
+namespace mongo {
 
-MONGO_CREATE_SORTER(mongo::Value,
-                    mongo::Document,
-                    mongo::SortExecutor<mongo::Document>::Comparator);
-MONGO_CREATE_SORTER(mongo::Value,
-                    mongo::SortableWorkingSetMember,
-                    mongo::SortExecutor<mongo::SortableWorkingSetMember>::Comparator);
-MONGO_CREATE_SORTER(mongo::Value, mongo::BSONObj, mongo::SortExecutor<mongo::BSONObj>::Comparator);
+void SamplingCEMethod::append(OperationContext*,
+                              BSONObjBuilder* b,
+                              StringData name,
+                              const boost::optional<TenantId>&) {
+    *b << name << SamplingCEMethod_serializer(_data.get());
+}
+
+Status SamplingCEMethod::setFromString(StringData value, const boost::optional<TenantId>&) {
+    _data = SamplingCEMethod_parse(IDLParserContext("internalQuerySamplingCEMethod"), value);
+    return Status::OK();
+}
+
+}  // namespace mongo
