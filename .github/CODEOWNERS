@@ -120,7 +120,7 @@ WORKSPACE.bazel @10gen/devprod-build @svc-auto-approve-bot
 /buildscripts/resmokeconfig/suites/**/update_fuzzer* @10gen/query-execution-write-exec @svc-auto-approve-bot
 /buildscripts/resmokeconfig/suites/**/vector_search* @10gen/query-integration-search @svc-auto-approve-bot
 /buildscripts/resmokeconfig/suites/**/query_golden* @10gen/query-optimization-golden-test @svc-auto-approve-bot
-/buildscripts/resmokeconfig/suites/**/queryable_wt* @10gen/server-rss-sydney @svc-auto-approve-bot
+/buildscripts/resmokeconfig/suites/**/queryable_wt* @10gen/server-backup-restore @svc-auto-approve-bot
 /buildscripts/resmokeconfig/suites/**/read_only* @10gen/server-rss-sydney @svc-auto-approve-bot
 /buildscripts/resmokeconfig/suites/**/no_passthrough_network* @10gen/server-networking-and-observability @svc-auto-approve-bot
 
@@ -128,15 +128,18 @@ WORKSPACE.bazel @10gen/devprod-build @svc-auto-approve-bot
 /buildscripts/resmokelib/**/* @10gen/devprod-correctness @svc-auto-approve-bot
 
 # The following patterns are parsed from ./buildscripts/resmokelib/testing/OWNERS.yml
-/buildscripts/resmokelib/testing/**/queryable_server.py @10gen/server-rss-sydney @svc-auto-approve-bot
+/buildscripts/resmokelib/testing/**/queryable_server.py @10gen/server-backup-restore @svc-auto-approve-bot
 
 # The following patterns are parsed from ./buildscripts/resmokelib/testing/hooks/OWNERS.yml
 /buildscripts/resmokelib/testing/hooks/**/*
 /buildscripts/resmokelib/testing/hooks/**/analyze_shard_key.py @10gen/server-cluster-scalability @svc-auto-approve-bot
-/buildscripts/resmokelib/testing/hooks/**/queryable_server_hook.py @10gen/server-rss-sydney @svc-auto-approve-bot
+/buildscripts/resmokelib/testing/hooks/**/queryable_server_hook.py @10gen/server-backup-restore @svc-auto-approve-bot
 /buildscripts/resmokelib/testing/hooks/**/change_streams.py @10gen/query-execution-change-streams @svc-auto-approve-bot
 /buildscripts/resmokelib/testing/hooks/**/enable_change_stream.py @10gen/query-execution-change-streams @svc-auto-approve-bot
 /buildscripts/resmokelib/testing/hooks/**/run_query_stats.py @10gen/query-integration-query-stats @svc-auto-approve-bot
+
+# The following patterns are parsed from ./buildscripts/resmokelib/testing/testcases/OWNERS.yml
+/buildscripts/resmokelib/testing/testcases/**/query_tester_server_test.py @10gen/query-optimization @svc-auto-approve-bot
 
 # The following patterns are parsed from ./buildscripts/smoke_tests/OWNERS.yml
 /buildscripts/smoke_tests/**/server_programmability.yml @10gen/server-programmability @svc-auto-approve-bot
@@ -1327,13 +1330,13 @@ WORKSPACE.bazel @10gen/devprod-build @svc-auto-approve-bot
 /src/mongo/db/modules/enterprise/jstests/hot_backups_multiversion/**/* @10gen/server-backup-restore @svc-auto-approve-bot
 
 # The following patterns are parsed from ./src/mongo/db/modules/enterprise/jstests/live_import/OWNERS.yml
-/src/mongo/db/modules/enterprise/jstests/live_import/**/* @10gen/server-rss-sydney @svc-auto-approve-bot
+/src/mongo/db/modules/enterprise/jstests/live_import/**/* @10gen/server-backup-restore @svc-auto-approve-bot
 
 # The following patterns are parsed from ./src/mongo/db/modules/enterprise/jstests/no_passthrough/OWNERS.yml
 /src/mongo/db/modules/enterprise/jstests/no_passthrough/**/* @10gen/query-integration-fle @10gen/server-security @svc-auto-approve-bot
 
 # The following patterns are parsed from ./src/mongo/db/modules/enterprise/jstests/queryable_wt/OWNERS.yml
-/src/mongo/db/modules/enterprise/jstests/queryable_wt/**/* @10gen/server-rss-sydney @svc-auto-approve-bot
+/src/mongo/db/modules/enterprise/jstests/queryable_wt/**/* @10gen/server-backup-restore @svc-auto-approve-bot
 
 # The following patterns are parsed from ./src/mongo/db/modules/enterprise/jstests/sasl/OWNERS.yml
 /src/mongo/db/modules/enterprise/jstests/sasl/**/* @10gen/server-security @svc-auto-approve-bot
@@ -1373,13 +1376,13 @@ WORKSPACE.bazel @10gen/devprod-build @svc-auto-approve-bot
 /src/mongo/db/modules/enterprise/src/ldap/**/* @10gen/server-security @svc-auto-approve-bot
 
 # The following patterns are parsed from ./src/mongo/db/modules/enterprise/src/live_import/OWNERS.yml
-/src/mongo/db/modules/enterprise/src/live_import/**/* @10gen/server-rss-sydney @svc-auto-approve-bot
+/src/mongo/db/modules/enterprise/src/live_import/**/* @10gen/server-backup-restore @svc-auto-approve-bot
 
 # The following patterns are parsed from ./src/mongo/db/modules/enterprise/src/magic_restore/OWNERS.yml
 /src/mongo/db/modules/enterprise/src/magic_restore/**/* @10gen/server-replication @svc-auto-approve-bot
 
 # The following patterns are parsed from ./src/mongo/db/modules/enterprise/src/queryable/OWNERS.yml
-/src/mongo/db/modules/enterprise/src/queryable/**/* @10gen/server-rss-sydney @svc-auto-approve-bot
+/src/mongo/db/modules/enterprise/src/queryable/**/* @10gen/server-backup-restore @svc-auto-approve-bot
 
 # The following patterns are parsed from ./src/mongo/db/modules/enterprise/src/sasl/OWNERS.yml
 /src/mongo/db/modules/enterprise/src/sasl/**/* @10gen/server-security @svc-auto-approve-bot
@@ -1451,6 +1454,10 @@ WORKSPACE.bazel @10gen/devprod-build @svc-auto-approve-bot
 # The following patterns are parsed from ./src/mongo/db/pipeline/search/OWNERS.yml
 /src/mongo/db/pipeline/search/**/* @10gen/query-integration-search @svc-auto-approve-bot
 /src/mongo/db/pipeline/search/**/OWNERS.yml @10gen/query-integration-staff-leads @svc-auto-approve-bot
+
+# The following patterns are parsed from ./src/mongo/db/pipeline/spilling/OWNERS.yml
+/src/mongo/db/pipeline/spilling/**/* @10gen/query-execution-aggregation @svc-auto-approve-bot
+/src/mongo/db/pipeline/spilling/**/OWNERS.yml @10gen/query-execution-staff-leads @svc-auto-approve-bot
 
 # The following patterns are parsed from ./src/mongo/db/pipeline/visitors/OWNERS.yml
 /src/mongo/db/pipeline/visitors/**/* @10gen/query-optimization @svc-auto-approve-bot
@@ -1869,6 +1876,11 @@ WORKSPACE.bazel @10gen/devprod-build @svc-auto-approve-bot
 # The following patterns are parsed from ./src/mongo/rpc/OWNERS.yml
 /src/mongo/rpc/**/* @10gen/server-networking-and-observability @svc-auto-approve-bot
 
+# The following patterns are parsed from ./src/mongo/rpc/metadata/OWNERS.yml
+/src/mongo/rpc/metadata/**/audit_user_attrs.h @10gen/server-security @svc-auto-approve-bot
+/src/mongo/rpc/metadata/**/impersonated_user_metadata.* @10gen/server-security @svc-auto-approve-bot
+/src/mongo/rpc/metadata/**/security_token* @10gen/server-security @svc-auto-approve-bot
+
 # The following patterns are parsed from ./src/mongo/s/OWNERS.yml
 /src/mongo/s/**/*analyze_shard_key* @10gen/server-cluster-scalability @svc-auto-approve-bot
 /src/mongo/s/**/*move*collection* @10gen/server-cluster-scalability @svc-auto-approve-bot
@@ -2087,6 +2099,9 @@ WORKSPACE.bazel @10gen/devprod-build @svc-auto-approve-bot
 # The following patterns are parsed from ./src/mongo/tools/mongobridge_tool/OWNERS.yml
 /src/mongo/tools/mongobridge_tool/**/* @10gen/server-networking-and-observability @svc-auto-approve-bot
 
+# The following patterns are parsed from ./src/mongo/tracing/OWNERS.yml
+/src/mongo/tracing/**/* @10gen/server-networking-and-observability @svc-auto-approve-bot
+
 # The following patterns are parsed from ./src/mongo/transport/OWNERS.yml
 /src/mongo/transport/**/* @10gen/server-networking-and-observability @svc-auto-approve-bot
 /src/mongo/transport/**/ssl_connection_context.h
@@ -2167,7 +2182,3 @@ WORKSPACE.bazel @10gen/devprod-build @svc-auto-approve-bot
 
 # The following patterns are parsed from ./src/third_party/wiredtiger/OWNERS.yml
 /src/third_party/wiredtiger/**/*
-
-# The following patterns are added by the generator script as exemptions during the Bazel migration
-**/SConscript
-**/BUILD.bazel

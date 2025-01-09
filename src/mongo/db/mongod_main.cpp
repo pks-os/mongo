@@ -346,7 +346,7 @@ auto makeTransportLayer(ServiceContext* svcCtx) {
     if (globalMongotParams.useGRPC) {
         uassert(9715900,
                 "Egress GRPC for search is not enabled",
-                feature_flags::gEgressGrpcForSearch.isEnabled(
+                feature_flags::gEgressGrpcForSearch.isEnabledUseLatestFCVWhenUninitialized(
                     serverGlobalParams.featureCompatibility.acquireFCVSnapshot()));
         useEgressGRPC = true;
     }
@@ -1943,10 +1943,7 @@ void shutdownTask(const ShutdownTaskArgs& shutdownArgs) {
     LOGV2_OPTIONS(9439300, {LogComponent::kSharding}, "Shutting down the filtering metadata cache");
     FilteringMetadataCache::get(opCtx)->shutDown();
 
-    // (Ignore FCV check): this feature flag is not FCV-gated.
-    if (auto configServerRoutingInfoCache = RoutingInformationCache::get(serviceContext);
-        configServerRoutingInfoCache != nullptr &&
-        !feature_flags::gDualCatalogCache.isEnabledAndIgnoreFCVUnsafe()) {
+    if (auto configServerRoutingInfoCache = RoutingInformationCache::get(serviceContext)) {
         LOGV2_OPTIONS(
             8778000, {LogComponent::kSharding}, "Shutting down the RoutingInformationCache");
         configServerRoutingInfoCache->shutDownAndJoin();

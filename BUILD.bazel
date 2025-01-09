@@ -2807,11 +2807,6 @@ mongo_unittest_install(
 )
 
 mongo_unittest_install(
-    name = "audit_test-audit_client_attrs_test",
-    srcs = ["//src/mongo/db/modules/enterprise/src/audit:audit_test"],
-)
-
-mongo_unittest_install(
     name = "audit_test-audit_enc_comp_manager_test",
     srcs = ["//src/mongo/db/modules/enterprise/src/audit:audit_test"],
 )
@@ -4198,11 +4193,6 @@ mongo_unittest_install(
 
 mongo_unittest_install(
     name = "db_pipeline_test-partition_iterator_test",
-    srcs = ["//src/mongo/db/pipeline:db_pipeline_test"],
-)
-
-mongo_unittest_install(
-    name = "db_pipeline_test-spillable_cache_test",
     srcs = ["//src/mongo/db/pipeline:db_pipeline_test"],
 )
 
@@ -8512,6 +8502,16 @@ mongo_unittest_install(
 )
 
 mongo_unittest_install(
+    name = "tracing_test",
+    srcs = ["//src/mongo/tracing:tracing_test"],
+)
+
+mongo_unittest_install(
+    name = "tracing_test-trace_initialization_test",
+    srcs = ["//src/mongo/tracing:tracing_test"],
+)
+
+mongo_unittest_install(
     name = "watchdog_test",
     srcs = ["//src/mongo/watchdog:watchdog_test"],
 )
@@ -8534,4 +8534,24 @@ mongo_unittest_install(
 mongo_unittest_install(
     name = "db_query_test-gen_filter_test",
     srcs = ["//src/mongo/db/query:db_query_test"],
+)
+
+mongo_unittest_install(
+    name = "db_spilling_test",
+    srcs = ["//src/mongo/db/pipeline/spilling:db_spilling_test"],
+)
+
+mongo_unittest_install(
+    name = "db_spilling_test-spillable_deque_test",
+    srcs = ["//src/mongo/db/pipeline/spilling:db_spilling_test"],
+)
+
+mongo_unittest_install(
+    name = "db_spilling_test-spillable_map_test",
+    srcs = ["//src/mongo/db/pipeline/spilling:db_spilling_test"],
+)
+
+mongo_unittest_install(
+    name = "audit_test-audit_client_observer_test",
+    srcs = ["//src/mongo/db/modules/enterprise/src/audit:audit_test"],
 )
