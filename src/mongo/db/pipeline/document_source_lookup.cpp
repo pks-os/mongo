@@ -297,6 +297,9 @@ std::vector<BSONObj> extractSourceStage(const std::vector<BSONObj>& pipeline) {
     }
     // When we first create a $lookup stage, the input 'pipeline' is unparsed, so we
     // check for the $documents stage itself.
+    //
+    // TODO SERVER-59628 This code should be updated when we enable any valid data source stage on
+    // the $lookup pipelined
     if (pipeline[0].hasField(DocumentSourceDocuments::kStageName) ||
         pipeline[0].hasField("$search"_sd) ||
         pipeline[0].hasField(DocumentSourceQueue::kStageName)) {
@@ -305,6 +308,9 @@ std::vector<BSONObj> extractSourceStage(const std::vector<BSONObj>& pipeline) {
     return {};
 }
 
+// Process and copy the given `pipeline` to the `_resolvedPipeline` attribute and compute where
+// the $match stage is going to be placed, indicated through the `_fieldMatchPipelineIdx`
+// variable.
 void DocumentSourceLookUp::resolvedPipelineHelper(
     NamespaceString fromNs,
     std::vector<BSONObj> pipeline,
@@ -318,7 +324,6 @@ void DocumentSourceLookUp::resolvedPipelineHelper(
     // we know the view is not mongot indexed because mongot doesn't support indexing a $search view
     // pipeline. and doesn't need the special support inside $_internalSearchIdLookup.
     if (_fromNsIsAView && search_helper_bson_obj::isMongotPipeline(pipeline) &&
-        expCtx->isFeatureFlagMongotIndexedViewEnabled() &&
         !search_helper_bson_obj::isMongotPipeline(_resolvedPipeline)) {
         // The user pipeline is a mongot pipeline but the view pipeline is not - so we assume it's a
         // mongot-indexed view. As such, we overwrite the view pipeline. This is because in the case
@@ -326,7 +331,7 @@ void DocumentSourceLookUp::resolvedPipelineHelper(
         // of its subpipeline.
         _resolvedPipeline = pipeline;
         _fieldMatchPipelineIdx = 1;
-        _fromExpCtx->setViewNSForMongotIndexedView(boost::make_optional(fromNs));
+        _fromExpCtx->setViewNS(boost::make_optional(fromNs));
         if (localForeignFields != boost::none) {
             std::tie(_localField, _foreignField) = *localForeignFields;
         } else {
@@ -337,15 +342,17 @@ void DocumentSourceLookUp::resolvedPipelineHelper(
 
     if (localForeignFields != boost::none) {
         std::tie(_localField, _foreignField) = *localForeignFields;
-        // Append a BSONObj to '_resolvedPipeline' as a placeholder for the stage corresponding to
-        // the local/foreignField $match. It must next after $documents if present.
+
+        // The $match stage should come after $documents if present.
         auto sourceStages = extractSourceStage(pipeline);
         _resolvedPipeline.insert(_resolvedPipeline.end(), sourceStages.begin(), sourceStages.end());
+
         // Save the correct position of the $match, but wait to insert it until we have finished
         // constructing the pipeline and created the introspection pipeline below.
         _fieldMatchPipelineIdx = _resolvedPipeline.size();
-        // Add the user pipeline to '_resolvedPipeline' after any potential view prefix and
-        // $match
+
+        // Add the rest of the user pipeline to `_resolvedPipeline` after any potential view prefix
+        // and $match.
         _resolvedPipeline.insert(
             _resolvedPipeline.end(), pipeline.begin() + sourceStages.size(), pipeline.end());
 
@@ -354,6 +361,7 @@ void DocumentSourceLookUp::resolvedPipelineHelper(
         // is a correlated prefix that will not be detected. Here, local/foreignFields are absent,
         // so we enable the cache.
         _cache.emplace(internalDocumentSourceLookupCacheSizeBytes.load());
+
         // Add the user pipeline to '_resolvedPipeline' after any potential view prefix and $match
         _resolvedPipeline.insert(_resolvedPipeline.end(), pipeline.begin(), pipeline.end());
     }
