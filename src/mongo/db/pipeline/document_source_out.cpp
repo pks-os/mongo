@@ -56,7 +56,7 @@
 #include "mongo/idl/idl_parser.h"
 #include "mongo/logv2/log.h"
 #include "mongo/logv2/log_component.h"
-#include "mongo/util/destructor_guard.h"
+#include "mongo/util/assert_util.h"
 #include "mongo/util/fail_point.h"
 #include "mongo/util/namespace_string_util.h"
 #include "mongo/util/str.h"
@@ -78,13 +78,14 @@ REGISTER_DOCUMENT_SOURCE(out,
                          DocumentSourceOut::LiteParsed::parse,
                          DocumentSourceOut::createFromBson,
                          AllowedWithApiStrict::kAlways);
+ALLOCATE_DOCUMENT_SOURCE_ID(out, DocumentSourceOut::id)
 
 DocumentSourceOut::~DocumentSourceOut() {
     if (_tmpCleanUpState == OutCleanUpProgress::kComplete) {
         return;
     }
 
-    DESTRUCTOR_GUARD({
+    try {
         // Make sure we drop the temp collection(s) if anything goes wrong.
         // Errors are ignored here because nothing can be done about them. Additionally, if
         // this fails and the collection is left behind, it will be cleaned up next time the
@@ -137,7 +138,9 @@ DocumentSourceOut::~DocumentSourceOut() {
                 MONGO_UNREACHABLE;
                 break;
         }
-    });
+    } catch (...) {
+        reportFailedDestructor(MONGO_SOURCE_LOCATION());
+    }
 }
 
 StageConstraints DocumentSourceOut::constraints(Pipeline::SplitState pipeState) const {

@@ -358,6 +358,7 @@ idl_generator(
     deps = [
         ":sharding_ddl_coordinator_gen",
         "//src/mongo/db:basic_types_gen",
+        "//src/mongo/s:sharding_types_gen",
     ],
 )
 
@@ -832,6 +833,7 @@ mongo_cc_library(
         "//src/mongo/db/s/resharding:resharding_coordinator_commit_monitor.cpp",
         "//src/mongo/db/s/resharding:resharding_coordinator_observer.cpp",
         "//src/mongo/db/s/resharding:resharding_coordinator_service.cpp",
+        "//src/mongo/db/s/resharding:resharding_coordinator_service_external_state.cpp",
         "//src/mongo/db/s/resharding:resharding_cumulative_metrics.cpp",
         "//src/mongo/db/s/resharding:resharding_cumulative_metrics_field_name_provider.cpp",
         "//src/mongo/db/s/resharding:resharding_data_copy_util.cpp",
@@ -948,6 +950,7 @@ mongo_cc_library(
         "//src/mongo/db/s/resharding:resharding_coordinator_commit_monitor.h",
         "//src/mongo/db/s/resharding:resharding_coordinator_observer.h",
         "//src/mongo/db/s/resharding:resharding_coordinator_service.h",
+        "//src/mongo/db/s/resharding:resharding_coordinator_service_external_state.h",
         "//src/mongo/db/s/resharding:resharding_cumulative_metrics.h",
         "//src/mongo/db/s/resharding:resharding_cumulative_metrics_field_name_provider.h",
         "//src/mongo/db/s/resharding:resharding_data_copy_util.h",
@@ -1240,6 +1243,7 @@ mongo_cc_library(
         "//src/mongo/db/s/config:configsvr_move_range_command.cpp",
         "//src/mongo/db/s/config:configsvr_remove_chunks_command.cpp",
         "//src/mongo/db/s/config:configsvr_remove_shard_command.cpp",
+        "//src/mongo/db/s/config:configsvr_remove_shard_commit_command.cpp",
         "//src/mongo/db/s/config:configsvr_remove_shard_from_zone_command.cpp",
         "//src/mongo/db/s/config:configsvr_remove_tags_command.cpp",
         "//src/mongo/db/s/config:configsvr_repair_sharded_collection_chunks_history_command.cpp",

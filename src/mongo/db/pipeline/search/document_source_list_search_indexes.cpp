@@ -38,6 +38,7 @@ REGISTER_DOCUMENT_SOURCE(listSearchIndexes,
                          DocumentSourceListSearchIndexes::LiteParsedListSearchIndexes::parse,
                          DocumentSourceListSearchIndexes::createFromBson,
                          AllowedWithApiStrict::kNeverInVersion1)
+ALLOCATE_DOCUMENT_SOURCE_ID(listSearchIndexes, DocumentSourceListSearchIndexes::id)
 
 void DocumentSourceListSearchIndexes::validateListSearchIndexesSpec(
     const DocumentSourceListSearchIndexesSpec* spec) {
@@ -145,7 +146,7 @@ DocumentSource::GetNextResult DocumentSourceListSearchIndexes::doGetNext() {
             _resolvedNamespace ? *_resolvedNamespace : pExpCtx->getNamespaceString(),
             bob.done(),
             *_collectionUUID,
-            pExpCtx->getViewNS());
+            pExpCtx->getViewNSForMongotIndexedView());
 
         /**
          * 'mangeSearchIndex' returns a cursor with the following fields:

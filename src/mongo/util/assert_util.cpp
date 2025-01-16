@@ -331,7 +331,7 @@ std::string demangleName(const std::type_info& typeinfo) {
 #endif
 }
 
-Status exceptionToStatus() noexcept {
+Status exceptionToStatus() {
     try {
         throw;
     } catch (const DBException& ex) {
@@ -347,8 +347,7 @@ Status exceptionToStatus() noexcept {
                           << boost::diagnostic_information(ex));
 
     } catch (...) {
-        LOGV2_FATAL_CONTINUE(23097, "Caught unknown exception in exceptionToStatus()");
-        std::terminate();
+        return Status(ErrorCodes::UnknownError, "Caught exception of unknown type");
     }
 }
 
@@ -376,5 +375,20 @@ std::vector<std::string> ScopedDebugInfoStack::getAll() {
     }
 
     return r;
+}
+
+void reportFailedDestructor(SourceLocation loc) {
+    try {
+        throw;
+    } catch (...) {
+        std::ostringstream oss;
+        globalActiveExceptionWitness().describe(oss);
+        LOGV2_IMPL(4615600,
+                   logv2::LogSeverity::Log(),
+                   {logv2::LogComponent::kDefault},
+                   "Caught exception in destructor",
+                   "exception"_attr = oss.str(),
+                   "function"_attr = loc.function_name());
+    }
 }
 }  // namespace mongo
