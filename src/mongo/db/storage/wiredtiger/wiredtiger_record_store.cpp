@@ -142,7 +142,7 @@ void checkOplogFormatVersion(WiredTigerRecoveryUnit& ru, const std::string& uri)
     fassertNoTrace(39998, appMetadata.getValue().getIntField("oplogKeyExtractionVersion") == 1);
 }
 
-void appendNumericStats(WT_SESSION* s, const std::string& uri, BSONObjBuilder& bob) {
+void appendNumericStats(WiredTigerSession& s, const std::string& uri, BSONObjBuilder& bob) {
     Status status =
         WiredTigerUtil::exportTableToBSON(s, "statistics:" + uri, "statistics=(fast)", bob);
     if (!status.isOK()) {
@@ -905,7 +905,7 @@ void WiredTigerRecordStore::printRecordMetadata(const RecordId& recordId,
                                                 std::set<Timestamp>* recordTimestamps) const {
     // Printing the record metadata requires a new session. We cannot open other cursors when there
     // are open history store cursors in the session.
-    WiredTigerSession session(_kvEngine->getConnection());
+    WiredTigerSession session(&_kvEngine->getConnection());
 
     // Per the version cursor API:
     // - A version cursor can only be called with the read timestamp as the oldest timestamp.
@@ -1143,18 +1143,16 @@ void WiredTigerRecordStore::appendNumericCustomStats(RecoveryUnit& ru,
                                                      BSONObjBuilder* result,
                                                      double scale) const {
     WiredTigerSession* session = WiredTigerRecoveryUnit::get(ru).getSessionNoTxn();
-    WT_SESSION* s = session->getSession();
 
     BSONObjBuilder bob(result->subobjStart(_engineName));
 
-    appendNumericStats(s, getURI(), bob);
+    appendNumericStats(*session, getURI(), bob);
 }
 
 void WiredTigerRecordStore::appendAllCustomStats(RecoveryUnit& ru,
                                                  BSONObjBuilder* result,
                                                  double scale) const {
     WiredTigerSession* session = WiredTigerRecoveryUnit::get(ru).getSessionNoTxn();
-    WT_SESSION* s = session->getSession();
     BSONObjBuilder bob(result->subobjStart(_engineName));
     {
         BSONObjBuilder metadata(bob.subobjStart("metadata"));
@@ -1183,7 +1181,7 @@ void WiredTigerRecordStore::appendAllCustomStats(RecoveryUnit& ru,
         bob.append("type", type);
     }
 
-    appendNumericStats(s, getURI(), bob);
+    appendNumericStats(*session, getURI(), bob);
 }
 
 void WiredTigerRecordStore::updateStatsAfterRepair(long long numRecords, long long dataSize) {
@@ -1239,7 +1237,7 @@ void WiredTigerRecordStore::_initNextIdIfNeeded(OperationContext* opCtx) {
 RecordId WiredTigerRecordStore::getLargestKey(OperationContext* opCtx) const {
     // Initialize the highest seen RecordId in a session without a read timestamp because that is
     // required by the largest_key API.
-    WiredTigerSession sessRaii(_kvEngine->getConnection());
+    WiredTigerSession sessRaii(&_kvEngine->getConnection());
 
     if (shard_role_details::getRecoveryUnit(opCtx)->inUnitOfWork()) {
         // We must limit the amount of time spent blocked on cache eviction to avoid a deadlock with
