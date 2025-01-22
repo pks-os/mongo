@@ -146,6 +146,8 @@ MONGO_FAIL_POINT_DEFINE(reshardingPauseCoordinatorBeforeRemovingStateDoc);
 MONGO_FAIL_POINT_DEFINE(reshardingPauseCoordinatorBeforeCompletion);
 MONGO_FAIL_POINT_DEFINE(reshardingPauseCoordinatorBeforeStartingErrorFlow);
 MONGO_FAIL_POINT_DEFINE(reshardingPauseCoordinatorBeforePersistingStateTransition);
+MONGO_FAIL_POINT_DEFINE(reshardingPerformValidationAfterApplying);
+MONGO_FAIL_POINT_DEFINE(reshardingPerformValidationAfterCloning);
 MONGO_FAIL_POINT_DEFINE(pauseBeforeTellDonorToRefresh);
 MONGO_FAIL_POINT_DEFINE(pauseAfterInsertCoordinatorDoc);
 MONGO_FAIL_POINT_DEFINE(pauseBeforeCTHolderInitialization);
@@ -2248,6 +2250,16 @@ ExecutorFuture<void> ReshardingCoordinator::_awaitAllRecipientsFinishedCloning(
                _reshardingCoordinatorObserver->awaitAllRecipientsFinishedCloning(),
                _ctHolder->getAbortToken())
         .thenRunOn(**executor)
+        .then([this](const ReshardingCoordinatorDocument& coordinatorDocChangedOnDisk) {
+            if (_metadata.getPerformVerification() &&
+                MONGO_unlikely(reshardingPerformValidationAfterCloning.shouldFail())) {
+                auto opCtx = _cancelableOpCtxFactory->makeOperationContext(&cc());
+                _reshardingCoordinatorExternalState->verifyClonedCollection(
+                    opCtx.get(), coordinatorDocChangedOnDisk);
+            }
+
+            return coordinatorDocChangedOnDisk;
+        })
         .then([this](ReshardingCoordinatorDocument coordinatorDocChangedOnDisk) {
             this->_updateCoordinatorDocStateAndCatalogEntries(CoordinatorStateEnum::kApplying,
                                                               coordinatorDocChangedOnDisk);
@@ -2366,7 +2378,16 @@ ReshardingCoordinator::_awaitAllRecipientsInStrictConsistency(
     return future_util::withCancellation(
                _reshardingCoordinatorObserver->awaitAllRecipientsInStrictConsistency(),
                _ctHolder->getAbortToken())
-        .thenRunOn(**executor);
+        .thenRunOn(**executor)
+        .then([this, executor](const ReshardingCoordinatorDocument& coordinatorDocChangedOnDisk) {
+            if (_metadata.getPerformVerification() &&
+                MONGO_unlikely(reshardingPerformValidationAfterApplying.shouldFail())) {
+                auto opCtx = _cancelableOpCtxFactory->makeOperationContext(&cc());
+                _reshardingCoordinatorExternalState->verifyFinalCollection(
+                    opCtx.get(), coordinatorDocChangedOnDisk);
+            }
+            return coordinatorDocChangedOnDisk;
+        });
 }
 
 void ReshardingCoordinator::_setCriticalSectionTimeoutCallback(
