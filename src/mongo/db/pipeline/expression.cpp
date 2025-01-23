@@ -2072,7 +2072,7 @@ void ExpressionMeta::_assertMetaFieldCompatibleWithHybridScoringFeatureFlag(
             serverGlobalParams.featureCompatibility.acquireFCVSnapshot());
     uassert(ErrorCodes::FailedToParse,
             "'featureFlagRankFusionFull' must be enabled to use "
-            "this meta field",
+            "'score' or 'scoreDetails' meta field",
             !usesHybridScoringProtectedField || hybridScoringFeatureFlagEnabled);
 }
 
@@ -2155,19 +2155,8 @@ intrusive_ptr<Expression> ExpressionMeta::parse(ExpressionContext* const expCtx,
 
 ExpressionMeta::ExpressionMeta(ExpressionContext* const expCtx, MetaType metaType)
     : Expression(expCtx), _metaType(metaType) {
-    switch (_metaType) {
-        case MetaType::kSearchScore:
-        case MetaType::kSearchHighlights:
-        case MetaType::kSearchScoreDetails:
-        case MetaType::kSearchSequenceToken:
-            break;
-        default:
-            // If the query contains $meta fields that are not currently supported by SBE, then
-            // we can't run any part of pipeline in SBE and we have to run the entire pipeline
-            // under the classic engine.
-            expCtx->setSbeCompatibility(SbeCompatibility::notCompatible);
-            expCtx->setSbePipelineCompatibility(SbeCompatibility::notCompatible);
-    }
+    expCtx->setSbeCompatibility(SbeCompatibility::notCompatible);
+    expCtx->setSbePipelineCompatibility(SbeCompatibility::notCompatible);
 }
 
 Value ExpressionMeta::serialize(const SerializationOptions& options) const {
