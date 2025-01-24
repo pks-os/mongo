@@ -61,7 +61,7 @@ MONGO_FAIL_POINT_DEFINE(hangTimeseriesInsertBeforeReopeningBucket);
 /**
  * Prepares the batch for commit. Sets min/max appropriately, records the number of
  * documents that have previously been committed to the bucket, and renders the batch
- * inactive. Must have commit rights.
+ * inactive.
  */
 void prepareWriteBatchForCommit(TrackingContexts& trackingContexts,
                                 WriteBatch& batch,
@@ -108,7 +108,7 @@ void prepareWriteBatchForCommit(TrackingContexts& trackingContexts,
 
 /**
  * Reports the result and status of a commit, and notifies anyone waiting on getResult().
- * Must have commit rights. Inactive batches only.
+ * Inactive batches only.
  */
 void finishWriteBatch(WriteBatch& batch, const CommitInfo& info) {
     batch.promise.emplaceValue(info);
@@ -546,12 +546,9 @@ Status prepareCommit(BucketCatalog& catalog,
     return Status::OK();
 }
 
-boost::optional<ClosedBucket> finish(
-    BucketCatalog& catalog,
-    std::shared_ptr<WriteBatch> batch,
-    const CommitInfo& info,
-    const std::function<void(const timeseries::bucket_catalog::WriteBatch&, StringData)>&
-        runPostCommitDebugChecks) {
+boost::optional<ClosedBucket> finish(BucketCatalog& catalog,
+                                     std::shared_ptr<WriteBatch> batch,
+                                     const CommitInfo& info) {
     invariant(!isWriteBatchFinished(*batch));
 
     boost::optional<ClosedBucket> closedBucket;
@@ -560,17 +557,6 @@ boost::optional<ClosedBucket> finish(
 
     auto& stripe = *catalog.stripes[internal::getStripeNumber(catalog, batch->bucketId)];
     stdx::lock_guard stripeLock{stripe.mutex};
-
-    if (MONGO_unlikely(runPostCommitDebugChecks)) {
-        Bucket* bucket = internal::useBucket(catalog.bucketStateRegistry,
-                                             stripe,
-                                             stripeLock,
-                                             batch->bucketId,
-                                             internal::IgnoreBucketState::kYes);
-        if (bucket) {
-            runPostCommitDebugChecks(*batch, {bucket->timeField.data(), bucket->timeField.size()});
-        }
-    }
 
     Bucket* bucket =
         internal::useBucketAndChangePreparedState(catalog.bucketStateRegistry,
@@ -717,17 +703,8 @@ void freeze(BucketCatalog& catalog, const BucketId& bucketId) {
     freezeBucket(catalog.bucketStateRegistry, bucketId);
 }
 
-void freeze(BucketCatalog& catalog,
-            const TimeseriesOptions& options,
-            const StringDataComparator* comparator,
-            const UUID& collectionUUID,
-            const BSONObj& bucket) {
-    freeze(catalog, extractBucketId(catalog, options, comparator, collectionUUID, bucket));
-}
-
 BucketId extractBucketId(BucketCatalog& bucketCatalog,
                          const TimeseriesOptions& options,
-                         const StringDataComparator* comparator,
                          const UUID& collectionUUID,
                          const BSONObj& bucket) {
     const OID bucketOID = bucket[kBucketIdFieldName].OID();
@@ -741,7 +718,6 @@ BucketId extractBucketId(BucketCatalog& bucketCatalog,
 }
 
 BucketKey::Signature getKeySignature(const TimeseriesOptions& options,
-                                     const StringDataComparator* comparator,
                                      const UUID& collectionUUID,
                                      const BSONObj& metadataObj) {
     tracking::Context trackingContext;
@@ -768,13 +744,11 @@ void appendExecutionStats(const BucketCatalog& catalog,
 
 StatusWith<std::tuple<InsertContext, Date_t>> prepareInsert(BucketCatalog& catalog,
                                                             const UUID& collectionUUID,
-                                                            const StringDataComparator* comparator,
                                                             const TimeseriesOptions& options,
                                                             const BSONObj& measurementDoc) {
     auto res = internal::extractBucketingParameters(
         getTrackingContext(catalog.trackingContexts, TrackingScope::kOpenBucketsByKey),
         collectionUUID,
-        comparator,
         options,
         measurementDoc);
     if (!res.isOK()) {
