@@ -1008,10 +1008,12 @@ Status WiredTigerKVEngine::beginBackup() {
 }
 
 void WiredTigerKVEngine::endBackup() {
+    // There could be a race with clean shutdown which unconditionally closes all the sessions.
+    WiredTigerConnection::BlockShutdown block(_connection.get());
     if (_connection->isShuttingDown()) {
-        // There could be a race with clean shutdown which unconditionally closes all the sessions.
         _backupSession->dropSessionBeforeDeleting();
     }
+
     _backupSession.reset();
 }
 
@@ -2985,6 +2987,11 @@ Status WiredTigerKVEngine::autoCompact(RecoveryUnit& ru, const AutoCompactOption
         ret,
         *s,
         "Failed to configure auto compact, please double check it is not already enabled.");
+
+    // We may get ErrorCodes::AlreadyInitialized when we try to reconfigure background compaction
+    // while it is already running.
+    uassert(status.code(), status.reason(), status != ErrorCodes::AlreadyInitialized);
+
     if (!status.isOK())
         LOGV2_ERROR(8704101,
                     "WiredTigerKVEngine::autoCompact() failed",
